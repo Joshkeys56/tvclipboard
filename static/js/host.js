@@ -112,12 +112,6 @@ let ws;
 let timerInterval;
 const sessionTimeout = 600;
 
-function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
 function startTimer() {
     let remaining = sessionTimeout;
     const timerEl = document.getElementById('time-remaining');
