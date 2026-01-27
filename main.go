@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"tvclipboard/pkg/config"
 	"tvclipboard/pkg/hub"
@@ -40,8 +45,33 @@ func main() {
 	// Log startup information
 	cfg.LogStartup()
 
-	// Start server
-	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {
-		log.Fatal("Server error:", err)
+	// Start server with graceful shutdown
+	httpServer := &http.Server{Addr: ":" + cfg.Port}
+
+	go func() {
+		log.Printf("Server listening on :%s", cfg.Port)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Server error:", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	// Graceful shutdown
+	log.Println("Shutting down server...")
+	h.Stop()
+	tokenManager.Stop()
+	srv.Shutdown()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
 	}
+
+	log.Println("Server stopped")
 }

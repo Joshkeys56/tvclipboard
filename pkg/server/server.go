@@ -15,8 +15,12 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
+		// In production, you should validate the origin
+		// For development, allow all origins
 		return true
 	},
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 // Server handles HTTP requests and WebSocket connections
@@ -26,6 +30,7 @@ type Server struct {
 	qrGenerator    *qrcode.Generator
 	staticFiles    fs.FS
 	version        string
+	shutdown       chan struct{}
 }
 
 // NewServer creates a new Server instance
@@ -36,7 +41,13 @@ func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, stat
 		qrGenerator:  qrGen,
 		staticFiles:  staticFiles,
 		version:      time.Now().Format("20060102150405"),
+		shutdown:     make(chan struct{}),
 	}
+}
+
+// Shutdown gracefully shuts down the server
+func (s *Server) Shutdown() {
+	close(s.shutdown)
 }
 
 // RegisterRoutes registers all HTTP routes
@@ -53,7 +64,8 @@ func (s *Server) RegisterRoutes() {
 	// Serve static files (CSS, JS)
 	staticContent, err := fs.Sub(s.staticFiles, "static")
 	if err != nil {
-		log.Fatal("Failed to create sub filesystem:", err)
+		log.Printf("Failed to create sub filesystem: %v", err)
+		return
 	}
 	fileServer := http.FileServer(http.FS(staticContent))
 	http.Handle("/static/", http.StripPrefix("/static/", fileServer))
@@ -88,18 +100,20 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	htmlContent = jsRegex.ReplaceAllString(htmlContent, `$1?v=`+s.version+`">`)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(htmlContent))
+	if _, err := w.Write([]byte(htmlContent)); err != nil {
+		log.Printf("Failed to write response: %v", err)
+	}
 }
 
 // handleQRCode generates and serves a QR code with an encrypted token
 func (s *Server) handleQRCode(w http.ResponseWriter, r *http.Request) {
 	// Generate new session token
-	encryptedToken, token, err := s.tokenManager.GenerateToken()
+	encryptedToken, _, err := s.tokenManager.GenerateToken()
 	if err != nil {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Generated new session token: %s (expires in %v)", token.ID, s.tokenManager.Timeout())
+	log.Printf("Generated new session token (expires in %v)", s.tokenManager.Timeout())
 
 	s.qrGenerator.ServeQRCode(w, r, encryptedToken)
 }
@@ -116,20 +130,20 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if hostExists {
 		if token == "" {
 			log.Printf("Connection rejected: no token provided (host exists)")
-			http.Error(w, "A host is already connected from another device. Close the other host.html tab to connect as host here, or scan the QR code from this device to connect as a client.", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized: valid token required", http.StatusUnauthorized)
 			return
 		}
 
 		_, err := s.tokenManager.ValidateToken(token)
 		if err != nil {
 			log.Printf("Token validation failed: %v", err)
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized: invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 	} else if token != "" {
 		// First connection (host) shouldn't have a token
 		log.Printf("Connection rejected: token provided for first connection")
-		http.Error(w, "Invalid connection - first connection should be from host page", http.StatusBadRequest)
+		http.Error(w, "Bad request: first connection should not include token", http.StatusBadRequest)
 		return
 	}
 

@@ -25,6 +25,7 @@ type Hub struct {
 	broadcast  chan BroadcastMessage
 	Register   chan *Client
 	Unregister chan *Client
+	stop       chan struct{} // Channel to signal hub to stop
 	mu         sync.RWMutex
 }
 
@@ -49,6 +50,7 @@ func NewHub() *Hub {
 		broadcast:  make(chan BroadcastMessage, 256),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
+		stop:       make(chan struct{}),
 	}
 }
 
@@ -74,8 +76,17 @@ func (h *Hub) Run() {
 				role = "host"
 			}
 			roleMsg := Message{Type: "role", Role: role}
-			msgBytes, _ := json.Marshal(roleMsg)
-			client.Send <- msgBytes
+			msgBytes, err := json.Marshal(roleMsg)
+			if err != nil {
+				log.Printf("Failed to marshal role message: %v", err)
+				h.mu.Unlock()
+				continue
+			}
+			select {
+			case client.Send <- msgBytes:
+			default:
+				log.Printf("Client %s send channel full, skipping role assignment", client.ID)
+			}
 
 			h.mu.Unlock()
 
@@ -92,9 +103,17 @@ func (h *Hub) Run() {
 					for id, c := range h.clients {
 						h.hostID = id
 						newHostMsg := Message{Type: "role", Role: "host"}
-						msgBytes, _ := json.Marshal(newHostMsg)
-						c.Send <- msgBytes
-						log.Printf("Client %s promoted to HOST", id)
+						msgBytes, err := json.Marshal(newHostMsg)
+						if err != nil {
+							log.Printf("Failed to marshal new host message: %v", err)
+							continue
+						}
+						select {
+						case c.Send <- msgBytes:
+							log.Printf("Client %s promoted to HOST", id)
+						default:
+							log.Printf("Client %s send channel full, skipping host promotion", id)
+						}
 						break
 					}
 				}
@@ -111,14 +130,28 @@ func (h *Hub) Run() {
 					select {
 					case client.Send <- broadcastMsg.Message:
 					default:
+						log.Printf("Client %s send channel full, removing from hub", id)
+						h.mu.RUnlock()
+						h.mu.Lock()
 						close(client.Send)
 						delete(h.clients, id)
+						h.mu.Unlock()
+						h.mu.RLock()
 					}
 				}
 			}
 			h.mu.RUnlock()
+
+		case <-h.stop:
+			// Stop signal received, exit the loop
+			return
 		}
 	}
+}
+
+// Stop gracefully stops the hub
+func (h *Hub) Stop() {
+	close(h.stop)
 }
 
 // ReadPump reads messages from the WebSocket connection
@@ -139,7 +172,11 @@ func (c *Client) ReadPump() {
 		if err := json.Unmarshal(message, &msg); err == nil {
 			// Broadcast to all other clients (not back to sender)
 			msg.From = c.ID
-			msgBytes, _ := json.Marshal(msg)
+			msgBytes, err := json.Marshal(msg)
+			if err != nil {
+				log.Printf("Failed to marshal message from %s: %v", c.ID, err)
+				continue
+			}
 			broadcastMsg := BroadcastMessage{
 				Message: msgBytes,
 				From:    c.ID,
@@ -160,7 +197,10 @@ func (c *Client) WritePump() {
 			if !ok {
 				return
 			}
-			c.Conn.WriteMessage(websocket.TextMessage, message)
+			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				log.Printf("WriteMessage error for client %s: %v", c.ID, err)
+				return
+			}
 		}
 	}
 }
@@ -193,12 +233,7 @@ func (h *Hub) SetHostID(id string) {
 	h.hostID = id
 }
 
-// GetHostID returns the current host ID (for testing only)
-func (h *Hub) GetHostID() string {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.hostID
-}
+
 
 // NewClient creates a new Client instance
 func NewClient(conn *websocket.Conn, hub *Hub, mobile bool) *Client {

@@ -28,15 +28,16 @@ type TokenManager struct {
 	privateKey  []byte
 	timeout     time.Duration
 	mu          *sync.RWMutex
+	stopCleanup chan struct{}
 }
 
 // generatePrivateKey generates a 32-byte random private key
-func generatePrivateKey() []byte {
+func generatePrivateKey() ([]byte, error) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
-		panic("Failed to generate private key")
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
-	return key
+	return key, nil
 }
 
 // encryptToken encrypts a session token using AES-GCM
@@ -107,13 +108,23 @@ func NewTokenManager(privateKeyHex string, timeoutMinutes int) *TokenManager {
 	if privateKeyHex != "" {
 		key, err := hex.DecodeString(privateKeyHex)
 		if err != nil || len(key) != 32 {
-			log.Printf("Invalid private key format, generating new one")
-			privateKey = generatePrivateKey()
+			log.Printf("Invalid private key format, generating new one: %v", err)
+			var genErr error
+			privateKey, genErr = generatePrivateKey()
+			if genErr != nil {
+				log.Printf("Failed to generate new private key: %v", genErr)
+				return nil
+			}
 		} else {
 			privateKey = key
 		}
 	} else {
-		privateKey = generatePrivateKey()
+		var err error
+		privateKey, err = generatePrivateKey()
+		if err != nil {
+			log.Printf("Failed to generate private key: %v", err)
+			return nil
+		}
 	}
 
 	timeout := 10 * time.Minute
@@ -122,10 +133,11 @@ func NewTokenManager(privateKeyHex string, timeoutMinutes int) *TokenManager {
 	}
 
 	tm := &TokenManager{
-		tokens:     make(map[string]SessionToken),
-		privateKey: privateKey,
-		timeout:    timeout,
-		mu:         &sync.RWMutex{},
+		tokens:      make(map[string]SessionToken),
+		privateKey:  privateKey,
+		timeout:     timeout,
+		mu:          &sync.RWMutex{},
+		stopCleanup: make(chan struct{}),
 	}
 
 	tm.startCleanupRoutine()
@@ -179,10 +191,20 @@ func (tm *TokenManager) startCleanupRoutine() {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			tm.cleanupExpiredTokens()
+		for {
+			select {
+			case <-ticker.C:
+				tm.cleanupExpiredTokens()
+			case <-tm.stopCleanup:
+				return
+			}
 		}
 	}()
+}
+
+// Stop stops the cleanup routine
+func (tm *TokenManager) Stop() {
+	close(tm.stopCleanup)
 }
 
 // cleanupExpiredTokens removes expired tokens from the map
@@ -216,7 +238,7 @@ func (tm *TokenManager) StoreToken(token SessionToken) {
 }
 
 // Exports for testing
-func GeneratePrivateKey() []byte {
+func GeneratePrivateKey() ([]byte, error) {
 	return generatePrivateKey()
 }
 

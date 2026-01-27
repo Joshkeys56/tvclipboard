@@ -209,7 +209,7 @@ func TestWebSocketConnectionHostWithoutToken(t *testing.T) {
 
 	// Verify that this client became host
 	time.Sleep(100 * time.Millisecond)
-	hostID := h.GetHostID()
+	hostID := h.HostID()
 
 	if hostID == "" {
 		t.Error("First connection should become host")

@@ -40,7 +40,10 @@ func TestTokenGeneration(t *testing.T) {
 
 // TestTokenEncryptionDecryption tests that tokens can be encrypted and decrypted
 func TestTokenEncryptionDecryption(t *testing.T) {
-	privateKey := GeneratePrivateKey()
+	privateKey, err := GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
 	token := SessionToken{
 		ID:        uuid.New().String(),
 		Timestamp: time.Now(),
@@ -72,8 +75,14 @@ func TestTokenEncryptionDecryption(t *testing.T) {
 
 // TestTokenWithDifferentKey tests that decryption fails with wrong key
 func TestTokenWithDifferentKey(t *testing.T) {
-	key1 := GeneratePrivateKey()
-	key2 := GeneratePrivateKey()
+	key1, err := GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
+	key2, err := GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
 	token := SessionToken{
 		ID:        uuid.New().String(),
 		Timestamp: time.Now(),
@@ -240,8 +249,14 @@ func TestTokenCleanup(t *testing.T) {
 
 // TestPrivateKeyGeneration tests that private keys are generated correctly
 func TestPrivateKeyGeneration(t *testing.T) {
-	key1 := GeneratePrivateKey()
-	key2 := GeneratePrivateKey()
+	key1, err := GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
+	key2, err := GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
 
 	// Keys should be different
 	if bytes.Equal(key1, key2) {
@@ -287,7 +302,10 @@ func TestGeneratePrivateKey(t *testing.T) {
 	// Generate multiple keys and verify they're different
 	var keys [][]byte
 	for i := 0; i < 100; i++ {
-		key := GeneratePrivateKey()
+		key, err := GeneratePrivateKey()
+		if err != nil {
+			t.Fatalf("Failed to generate private key: %v", err)
+		}
 		keys = append(keys, key)
 
 		// Check length
