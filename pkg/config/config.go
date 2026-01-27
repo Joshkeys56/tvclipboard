@@ -1,6 +1,8 @@
 package config
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -8,36 +10,84 @@ import (
 	"time"
 )
 
+// cliFlags holds parsed CLI flag values
+type cliFlags struct {
+	portFlag  string
+	expiresFlag int
+	keyFlag    string
+	helpFlag   bool
+}
+
+var cfg = cliFlags{}
+
 // Config holds the application configuration
 type Config struct {
 	Port            string
 	SessionTimeout  time.Duration
 	PrivateKeyHex   string
 	LocalIP         string
+	showHelp        bool
 }
 
-// Load loads configuration from environment variables and defaults
+// Load loads configuration from environment variables and CLI flags
 func Load() *Config {
-	port := os.Getenv("PORT")
+	// Parse CLI flags
+	flag.StringVar(&cfg.portFlag, "port", "", "Server port (default: 3333, env: PORT)")
+	flag.IntVar(&cfg.expiresFlag, "expires", 0, "Session timeout in minutes (default: 10, env: TVCLIPBOARD_SESSION_TIMEOUT)")
+	flag.StringVar(&cfg.keyFlag, "key", "", "Private key hex string (env: TVCLIPBOARD_PRIVATE_KEY)")
+	flag.BoolVar(&cfg.helpFlag, "help", false, "Show this help message")
+	flag.Parse()
+
+	if cfg.helpFlag {
+		printUsage()
+		os.Exit(0)
+	}
+
+	// Load from environment variables (fallback to CLI flags if set)
+	port := cfg.portFlag
+	if port == "" {
+		port = os.Getenv("PORT")
+	}
 	if port == "" {
 		port = "3333"
 	}
 
-	timeoutMinutes, err := strconv.Atoi(os.Getenv("TVCLIPBOARD_SESSION_TIMEOUT"))
-	if err != nil || timeoutMinutes <= 0 {
-		timeoutMinutes = 10
+	timeoutMinutes := cfg.expiresFlag
+	if timeoutMinutes == 0 {
+		timeoutStr := os.Getenv("TVCLIPBOARD_SESSION_TIMEOUT")
+		var err error
+		timeoutMinutes, err = strconv.Atoi(timeoutStr)
+		if err != nil || timeoutMinutes <= 0 {
+			timeoutMinutes = 10
+		}
 	}
 
-	privateKeyHex := os.Getenv("TVCLIPBOARD_PRIVATE_KEY")
+	privateKeyHex := cfg.keyFlag
+	if privateKeyHex == "" {
+		privateKeyHex = os.Getenv("TVCLIPBOARD_PRIVATE_KEY")
+	}
 
-	cfg := &Config{
+	config := &Config{
 		Port:            port,
 		SessionTimeout:  time.Duration(timeoutMinutes) * time.Minute,
 		PrivateKeyHex:   privateKeyHex,
 		LocalIP:         getLocalIP(),
+		showHelp:        cfg.helpFlag,
 	}
 
-	return cfg
+	return config
+}
+
+// printUsage displays help information
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "\nOptions:\n")
+	flag.PrintDefaults()
+	fmt.Fprintf(os.Stderr, "\nEnvironment Variables:\n")
+	fmt.Fprintf(os.Stderr, "  PORT                        Server port (default: 3333)\n")
+	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_SESSION_TIMEOUT  Session timeout in minutes (default: 10)\n")
+	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_PRIVATE_KEY      Private key hex string (auto-generated if not set)\n")
+	fmt.Fprintf(os.Stderr, "\nCLI flags override environment variables.\n")
 }
 
 // getLocalIP returns the local IP address
