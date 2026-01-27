@@ -1,9 +1,14 @@
 // Host-specific functionality
+(function() {
+    'use strict';
 
-let receivedFullContent = '';
-let isRevealed = false;
+    let receivedFullContent = '';
+    let isRevealed = false;
+    let ws;
+    let timerInterval;
+    const sessionTimeout = 600;
 
-async function showReceivedContent(encryptedContent, from) {
+    async function showReceivedContent(encryptedContent, from) {
     const section = document.getElementById('received-section');
     const contentDiv = document.getElementById('received-content');
     const timestamp = document.getElementById('timestamp');
@@ -108,11 +113,7 @@ function generateQRCode() {
     urlText.textContent = url + ' (Links to client mode)';
 }
 
-let ws;
-let timerInterval;
-const sessionTimeout = 600;
-
-function startTimer() {
+    function startTimer() {
     let remaining = sessionTimeout;
     const timerEl = document.getElementById('time-remaining');
 
@@ -149,6 +150,12 @@ function refreshPage() {
 }
 
 function connect() {
+    // Close existing WebSocket connection before creating a new one
+    if (ws) {
+        ws.onclose = null; // Prevent reconnection trigger
+        ws.close();
+    }
+
     const url = getWebSocketURL();
     console.log('Attempting to connect to WebSocket URL:', url);
 
@@ -168,6 +175,12 @@ function connect() {
     };
 
     ws.onclose = function(event) {
+        // Clear timer when connection closes
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
         const status = document.getElementById('status');
         status.textContent = '🔌 Disconnected';
         status.className = 'status disconnected';
@@ -211,3 +224,4 @@ function handleRoleAssignment(role) {
 }
 
 connect();
+})();

@@ -1,6 +1,15 @@
 // Client-specific functionality
+(function() {
+    'use strict';
 
-async function sendText() {
+    let ws;
+    let sessionExpired = false;
+    let connectionFailed = false;
+    let timerInterval;
+    const appDiv = document.querySelector('.container');
+    const sessionTimeout = appDiv ? parseInt(appDiv.getAttribute('data-session-timeout') || '600') : 600;
+
+    async function sendText() {
     const input = document.getElementById('input');
     const content = input.value.trim();
 
@@ -69,14 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-let ws;
-let sessionExpired = false;
-let connectionFailed = false;
-let timerInterval;
-const appDiv = document.querySelector('.container');
-const sessionTimeout = appDiv ? parseInt(appDiv.getAttribute('data-session-timeout') || '600') : 600;
-
-function checkToken() {
+    function checkToken() {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
@@ -195,6 +197,12 @@ function connect() {
         return;
     }
 
+    // Close existing WebSocket connection before creating a new one
+    if (ws) {
+        ws.onclose = null; // Prevent reconnection trigger
+        ws.close();
+    }
+
     const url = getWebSocketURL();
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
@@ -224,6 +232,12 @@ function connect() {
     ws.onclose = function(event) {
         if (sessionExpired || connectionFailed) {
             return;
+        }
+
+        // Clear timer when connection closes
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
         }
 
         const status = document.getElementById('status');
@@ -289,3 +303,4 @@ window.sendText = function() {
 };
 
 connect();
+})();
