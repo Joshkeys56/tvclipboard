@@ -247,7 +247,7 @@ func main() {
 		if r.TLS != nil {
 			scheme = "https"
 		}
-		url := scheme + "://" + host
+		url := scheme + "://" + host + "?mode=client"
 
 		png, err := qrcode.Encode(url, qrcode.Medium, 256)
 		if err != nil {
@@ -277,7 +277,7 @@ func main() {
 	log.Printf("Local access: http://localhost:%s\n", port)
 	if localIP != "localhost" {
 		log.Printf("Network access: http://%s:%s\n", localIP, port)
-		log.Printf("QR code will use: http://%s:%s\n", localIP, port)
+		log.Printf("QR code will use: http://%s:%s?mode=client\n", localIP, port)
 	}
 	log.Printf("Open in browser and scan QR code with your phone\n")
 
