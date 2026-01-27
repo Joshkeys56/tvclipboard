@@ -13,6 +13,8 @@ A simple peer-to-peer clipboard sharing application written in Go. Share text be
 - 🔒 **P2P**: Direct connection between your devices
 - 🎯 **Host/Client Roles**: First device becomes host, others are clients
 - 👥 **Multi-Device**: Phone-to-phone, desktop-to-phone, any combination!
+- ⏱️ **Session Management**: Time-limited QR codes prevent unauthorized access
+- 🔄 **Auto-Refresh**: Host page regenerates QR code every session timeout
 
 ## Usage
 
@@ -68,6 +70,70 @@ Navigate to any of the URLs shown in the console output (localhost works fine fo
   - On `http://` (like local network), use long-press in textarea → "Paste"
   - Paste button works on `https://` or `localhost://`
 
+## Testing
+
+TV Clipboard includes a comprehensive test suite covering all major functionality:
+
+### Running Tests
+
+```bash
+# Run all tests
+go test -v
+
+# Run tests with coverage
+go test -v -cover
+
+# Run specific test
+go test -v -run TestTokenGeneration
+```
+
+### Test Coverage
+
+The test suite includes 33 tests covering:
+
+**Session Management (15 tests)**
+- Token generation with valid format
+- Token encryption/decryption with AES-GCM
+- Token validation (valid, invalid, expired, not found)
+- Token cleanup of expired sessions
+- Private key generation from hex string or random
+
+**QR Code Generation (2 tests)**
+- QR code endpoint returns valid PNG format
+- QR code URL contains proper token parameter
+
+**Client URL Handling (3 tests)**
+- Client page responds to missing token
+- Client page contains error handling JavaScript
+
+**WebSocket Connection (4 tests)**
+- Host connection without token succeeds
+- Host connection with token is rejected
+- Client connection without token is rejected when host exists
+- Client connection with invalid/expired token is rejected
+
+**Message Flow (9 tests)**
+- Message broadcasting to all clients except sender
+- Complete message flow from client to host
+- Encryption compatibility with various content types
+- Long messages (10KB, 100KB)
+- Empty messages
+- Messages with quotes and special characters
+- Multiline messages
+- Concurrent message handling
+- Client reconnection
+
+### Test Coverage
+
+Current test coverage focuses on:
+- Session token generation and validation
+- WebSocket connection lifecycle
+- Message serialization/deserialization
+- Token-based authentication
+- QR code generation
+
+Note: Client-side encryption (using Web Crypto API in JavaScript) is tested through integration tests that verify complete message flow between clients and host.
+
 ## Requirements
 
 - Go 1.16 or higher (for building)
@@ -78,3 +144,48 @@ Navigate to any of the URLs shown in the console output (localhost works fine fo
 - github.com/gorilla/websocket
 - github.com/google/uuid
 - github.com/skip2/go-qrcode
+
+## Security
+
+### Session Management
+TV Clipboard includes session-based security to prevent unauthorized access:
+
+- **Time-Limited QR Codes**: Each QR code contains an encrypted token that expires after a configurable timeout (default: 10 minutes)
+- **Token Validation**: WebSocket connections must provide a valid, non-expired token
+- **Auto-Refresh**: Host page automatically refreshes and generates a new QR code before session expires
+- **Client Expiration**: Clients show a countdown timer and disable sending when session expires
+
+### Environment Variables
+
+You can configure session security using environment variables:
+
+#### `TVCLIPBOARD_PRIVATE_KEY`
+- 32-byte hexadecimal string used to encrypt session tokens
+- If not set, a random key is generated on each server restart
+- Example: `TVCLIPBOARD_PRIVATE_KEY="a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"`
+
+#### `TVCLIPBOARD_SESSION_TIMEOUT`
+- Session timeout in minutes (integer)
+- Default: 10 minutes
+- Example: `TVCLIPBOARD_SESSION_TIMEOUT=15`
+
+### Usage Example
+```bash
+# Set custom private key and 15-minute timeout
+export TVCLIPBOARD_PRIVATE_KEY="your-32-byte-hex-key-here"
+export TVCLIPBOARD_SESSION_TIMEOUT=15
+./tvclipboard
+```
+
+### Token Encryption
+Session tokens are encrypted using AES-GCM with your private key:
+- Each token contains a random UUID and timestamp
+- Tokens are stored server-side and validated on connection
+- Expired tokens are automatically cleaned up every minute
+- Invalid or expired connections are rejected with HTTP 401
+
+### Security Notes
+- Tokens are included in QR code URLs, so anyone who scans QR code can connect
+- Session timeout limits how long a QR code remains valid
+- Private key rotation requires server restart (new QR code generation)
+- For local network use, default settings provide reasonable security

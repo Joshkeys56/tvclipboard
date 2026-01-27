@@ -56,6 +56,26 @@ h1 {
     color: white;
 }
 
+.timer {
+    text-align: center;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-weight: 500;
+    font-size: 14px;
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
 .qr-section {
     text-align: center;
     margin-bottom: 30px;

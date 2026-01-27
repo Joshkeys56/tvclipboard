@@ -12,6 +12,10 @@
         <p class="subtitle">Share text between your devices</p>
         <p class="mode-switch">You are host</p>
 
+        <div id="timer" class="timer">
+            ⏱️ New QR code in <span id="time-remaining">10:00</span>
+        </div>
+
         <div id="status" class="status disconnected">
             🔌 Disconnected
         </div>
@@ -37,6 +41,50 @@
     <script src="/static/js/host.js"></script>
     <script>
         let ws;
+        let timerInterval;
+        const sessionTimeout = 600;
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer() {
+            let remaining = sessionTimeout;
+            const timerEl = document.getElementById('time-remaining');
+
+            timerInterval = setInterval(function() {
+                remaining--;
+                if (timerEl) {
+                    timerEl.textContent = formatTime(remaining);
+                }
+
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    refreshPage();
+                } else if (remaining <= 60) {
+                    if (timerEl) {
+                        timerEl.style.color = '#ff6b6b';
+                        timerEl.style.animation = 'pulse 1s infinite';
+                    }
+                }
+            }, 1000);
+
+            if (timerEl) {
+                timerEl.textContent = formatTime(remaining);
+            }
+        }
+
+        function refreshPage() {
+            const timerEl = document.getElementById('timer');
+            if (timerEl) {
+                timerEl.innerHTML = '⏱️ <span style="color: #4CAF50;">Refreshing QR code...</span>';
+            }
+            setTimeout(function() {
+                location.reload();
+            }, 2000);
+        }
 
         function connect() {
             const url = getWebSocketURL();
@@ -48,6 +96,8 @@
                 status.textContent = '🖥️ Host Mode - Connected';
                 status.className = 'status connected';
                 console.log('WebSocket connected');
+
+                startTimer();
             };
 
             ws.onclose = function() {
@@ -56,7 +106,6 @@
                 status.className = 'status disconnected';
                 console.log('WebSocket disconnected');
 
-                // Reconnect after 3 seconds
                 setTimeout(connect, 3000);
             };
 
@@ -83,7 +132,6 @@
             generateQRCode();
         }
 
-        // Initialize
         connect();
     </script>
 </body>

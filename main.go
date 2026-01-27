@@ -1,13 +1,24 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"embed"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -52,6 +63,18 @@ type Message struct {
 	Role    string `json:"role,omitempty"`
 }
 
+type SessionToken struct {
+	ID        string    `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type TokenManager struct {
+	tokens      map[string]SessionToken
+	privateKey  []byte
+	timeout     time.Duration
+	mu          sync.RWMutex
+}
+
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[string]*Client),
@@ -59,6 +82,171 @@ func NewHub() *Hub {
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
+}
+
+func generatePrivateKey() []byte {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic("Failed to generate private key")
+	}
+	return key
+}
+
+func encryptToken(token SessionToken, privateKey []byte) (string, error) {
+	jsonData, err := json.Marshal(token)
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(privateKey)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, jsonData, nil)
+	return base64.URLEncoding.EncodeToString(ciphertext), nil
+}
+
+func decryptToken(encrypted string, privateKey []byte) (SessionToken, error) {
+	ciphertext, err := base64.URLEncoding.DecodeString(encrypted)
+	if err != nil {
+		return SessionToken{}, err
+	}
+
+	block, err := aes.NewCipher(privateKey)
+	if err != nil {
+		return SessionToken{}, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return SessionToken{}, err
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return SessionToken{}, fmt.Errorf("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return SessionToken{}, err
+	}
+
+	var token SessionToken
+	if err := json.Unmarshal(plaintext, &token); err != nil {
+		return SessionToken{}, err
+	}
+
+	return token, nil
+}
+
+func NewTokenManager(privateKeyHex string, timeoutMinutes int) *TokenManager {
+	var privateKey []byte
+	if privateKeyHex != "" {
+		key, err := hex.DecodeString(privateKeyHex)
+		if err != nil || len(key) != 32 {
+			log.Printf("Invalid private key format, generating new one")
+			privateKey = generatePrivateKey()
+		} else {
+			privateKey = key
+		}
+	} else {
+		privateKey = generatePrivateKey()
+	}
+
+	timeout := 10 * time.Minute
+	if timeoutMinutes > 0 {
+		timeout = time.Duration(timeoutMinutes) * time.Minute
+	}
+
+	tm := &TokenManager{
+		tokens:     make(map[string]SessionToken),
+		privateKey: privateKey,
+		timeout:    timeout,
+	}
+
+	tm.startCleanupRoutine()
+	return tm
+}
+
+func (tm *TokenManager) GenerateToken() (string, SessionToken, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	token := SessionToken{
+		ID:        uuid.New().String(),
+		Timestamp: time.Now(),
+	}
+
+	tm.tokens[token.ID] = token
+
+	encrypted, err := encryptToken(token, tm.privateKey)
+	if err != nil {
+		return "", SessionToken{}, err
+	}
+
+	return encrypted, token, nil
+}
+
+func (tm *TokenManager) ValidateToken(encrypted string) (SessionToken, error) {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+
+	token, err := decryptToken(encrypted, tm.privateKey)
+	if err != nil {
+		return SessionToken{}, fmt.Errorf("invalid token")
+	}
+
+	storedToken, ok := tm.tokens[token.ID]
+	if !ok {
+		return SessionToken{}, fmt.Errorf("token not found")
+	}
+
+	if time.Since(storedToken.Timestamp) > tm.timeout {
+		return SessionToken{}, fmt.Errorf("token expired")
+	}
+
+	return storedToken, nil
+}
+
+func (tm *TokenManager) startCleanupRoutine() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			tm.cleanupExpiredTokens()
+		}
+	}()
+}
+
+func (tm *TokenManager) cleanupExpiredTokens() {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	for id, token := range tm.tokens {
+		if time.Since(token.Timestamp) > tm.timeout {
+			delete(tm.tokens, id)
+			log.Printf("Cleaned up expired token: %s", id)
+		}
+	}
+}
+
+func hashKey(key string) []byte {
+	h := sha256.New()
+	h.Write([]byte(key))
+	return h.Sum(nil)
 }
 
 func (h *Hub) Run() {
@@ -171,7 +359,34 @@ func (c *Client) WritePump() {
 	}
 }
 
-func handleWebSocket(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func handleWebSocket(hub *Hub, tm *TokenManager, w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+
+	hub.mu.RLock()
+	hostExists := hub.hostID != ""
+	hub.mu.RUnlock()
+
+	// Require token for client connections (when host already exists)
+	if hostExists {
+		if token == "" {
+			log.Printf("Connection rejected: no token provided (host exists)")
+			http.Error(w, "Token required for connection", http.StatusUnauthorized)
+			return
+		}
+
+		_, err := tm.ValidateToken(token)
+		if err != nil {
+			log.Printf("Token validation failed: %v", err)
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+	} else if token != "" {
+		// First connection (host) shouldn't have a token
+		log.Printf("Connection rejected: token provided for first connection")
+		http.Error(w, "Invalid connection - first connection should be from host page", http.StatusBadRequest)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
@@ -211,11 +426,21 @@ func getLocalIP() string {
 }
 
 func main() {
+	// Parse environment variables
+	privateKeyHex := os.Getenv("TVCLIPBOARD_PRIVATE_KEY")
+	timeoutMinutes, _ := strconv.Atoi(os.Getenv("TVCLIPBOARD_SESSION_TIMEOUT"))
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 10
+	}
+
+	// Initialize components
 	hub := NewHub()
 	go hub.Run()
+	tokenManager := NewTokenManager(privateKeyHex, timeoutMinutes)
 
 	port := "8080"
 	localIP := getLocalIP()
+	sessionTimeoutSec := int(tokenManager.timeout.Seconds())
 
 	// Template handler for serving HTML
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -235,19 +460,33 @@ func main() {
 			return
 		}
 
+		// Inject session timeout as a data attribute
+		htmlContent := string(content)
+		if mode == "client" {
+			htmlContent = injectSessionTimeout(htmlContent, sessionTimeoutSec)
+		}
+
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(content)
+		w.Write([]byte(htmlContent))
 	})
 
 	// QR code endpoint
 	http.HandleFunc("/qrcode.png", func(w http.ResponseWriter, r *http.Request) {
+		// Generate new session token
+		encryptedToken, token, err := tokenManager.GenerateToken()
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Generated new session token: %s (expires in %v)", token.ID, tokenManager.timeout)
+
 		// Use the local IP address for the QR code
 		host := localIP + ":" + port
 		scheme := "http"
 		if r.TLS != nil {
 			scheme = "https"
 		}
-		url := scheme + "://" + host + "?mode=client"
+		url := scheme + "://" + host + "?token=" + encryptedToken + "&mode=client"
 
 		png, err := qrcode.Encode(url, qrcode.Medium, 256)
 		if err != nil {
@@ -261,7 +500,7 @@ func main() {
 
 	// WebSocket endpoint
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		handleWebSocket(hub, w, r)
+		handleWebSocket(hub, tokenManager, w, r)
 	})
 
 	// Serve static files (CSS, JS)
@@ -274,6 +513,7 @@ func main() {
 
 	// Print helpful connection information
 	log.Printf("Server starting on port %s\n", port)
+	log.Printf("Session timeout: %v minutes\n", timeoutMinutes)
 	log.Printf("Local access: http://localhost:%s\n", port)
 	if localIP != "localhost" {
 		log.Printf("Network access: http://%s:%s\n", localIP, port)
@@ -284,4 +524,26 @@ func main() {
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal("Server error:", err)
 	}
+}
+
+func injectSessionTimeout(html string, timeoutSec int) string {
+	tag := `<div class="container" data-session-timeout="` + strconv.Itoa(timeoutSec) + `">`
+	oldTag := `<div class="container">`
+	return htmlReplace(html, oldTag, tag)
+}
+
+func htmlReplace(html, old, new string) string {
+	if idx := findSubstring(html, old); idx != -1 {
+		return html[:idx] + new + html[idx+len(old):]
+	}
+	return html
+}
+
+func findSubstring(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
