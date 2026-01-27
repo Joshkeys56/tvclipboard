@@ -217,6 +217,28 @@ func main() {
 	port := "8080"
 	localIP := getLocalIP()
 
+	// Template handler for serving HTML
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		mode := r.URL.Query().Get("mode")
+
+		var templateFile string
+		if mode == "client" {
+			templateFile = "client.html"
+		} else {
+			templateFile = "host.html"
+		}
+
+		// Read and serve the template
+		content, err := staticFiles.ReadFile("static/" + templateFile)
+		if err != nil {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(content)
+	})
+
 	// QR code endpoint
 	http.HandleFunc("/qrcode.png", func(w http.ResponseWriter, r *http.Request) {
 		// Use the local IP address for the QR code
@@ -242,13 +264,13 @@ func main() {
 		handleWebSocket(hub, w, r)
 	})
 
-	// Serve static files
+	// Serve static files (CSS, JS)
 	staticContent, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		log.Fatal("Failed to create sub filesystem:", err)
 	}
 	fs := http.FileServer(http.FS(staticContent))
-	http.Handle("/", fs)
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	// Print helpful connection information
 	log.Printf("Server starting on port %s\n", port)

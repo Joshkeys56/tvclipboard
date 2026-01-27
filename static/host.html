@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Clipboard - Host</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📋 TV Clipboard (Host)</h1>
+        <p class="subtitle">Share text between your devices</p>
+        <p class="mode-switch">You are host</p>
+
+        <div id="status" class="status disconnected">
+            🔌 Disconnected
+        </div>
+
+        <div class="qr-section">
+            <h2>📱 Scan with your phone</h2>
+            <div id="qrcode"></div>
+            <div class="url-text" id="url-text"></div>
+        </div>
+
+        <div id="received-section" class="received-section">
+            <h2>📥 Received</h2>
+            <div id="received-content" class="received-content"></div>
+            <div class="timestamp" id="timestamp"></div>
+            <button id="reveal-btn" class="reveal-btn" onclick="toggleReveal()">👁️ Show Content</button>
+            <div class="button-group">
+                <button class="copy-btn" onclick="copyReceived()">Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/host.js"></script>
+    <script>
+        let ws;
+
+        function connect() {
+            const url = getWebSocketURL();
+
+            ws = new WebSocket(url);
+
+            ws.onopen = function() {
+                const status = document.getElementById('status');
+                status.textContent = '🖥️ Host Mode - Connected';
+                status.className = 'status connected';
+                console.log('WebSocket connected');
+            };
+
+            ws.onclose = function() {
+                const status = document.getElementById('status');
+                status.textContent = '🔌 Disconnected';
+                status.className = 'status disconnected';
+                console.log('WebSocket disconnected');
+
+                // Reconnect after 3 seconds
+                setTimeout(connect, 3000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                console.log('Received message:', message);
+
+                if (message.type === 'role') {
+                    handleRoleAssignment(message.role);
+                } else if (message.type === 'text' && message.content) {
+                    showReceivedContent(message.content, message.from);
+                }
+            };
+        }
+
+        function handleRoleAssignment(role) {
+            if (role !== 'host') {
+                console.warn('Expected host role but got:', role);
+            }
+            generateQRCode();
+        }
+
+        // Initialize
+        connect();
+    </script>
+</body>
+</html>

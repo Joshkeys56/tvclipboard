@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Clipboard - Client</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Send to Host</h1>
+        <p class="subtitle">Paste text here and send</p>
+        <p class="mode-switch">Connected to host</p>
+
+        <div id="status" class="status disconnected">
+            🔌 Disconnected
+        </div>
+
+        <div class="input-section">
+            <h2>✍️ Enter or paste text</h2>
+            <textarea id="input" placeholder="Type or paste text here, then click Send..."></textarea>
+            <div class="button-group">
+                <button class="send-btn" onclick="sendText()">Send</button>
+                <button class="copy-btn" onclick="copyFromClipboard()">Paste</button>
+                <button class="clear-btn" onclick="clearInput()">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/client.js"></script>
+    <script>
+        let ws;
+
+        function connect() {
+            const url = getWebSocketURL();
+
+            ws = new WebSocket(url);
+
+            ws.onopen = function() {
+                const status = document.getElementById('status');
+                status.textContent = '📱 Client Mode - Connected';
+                status.className = 'status connected';
+                console.log('WebSocket connected');
+            };
+
+            ws.onclose = function() {
+                const status = document.getElementById('status');
+                status.textContent = '🔌 Disconnected';
+                status.className = 'status disconnected';
+                console.log('WebSocket disconnected');
+
+                // Reconnect after 3 seconds
+                setTimeout(connect, 3000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                console.log('Received message:', message);
+
+                if (message.type === 'role') {
+                    handleRoleAssignment(message.role);
+                }
+                // Client doesn't show received messages from others
+            };
+        }
+
+        function handleRoleAssignment(role) {
+            if (role !== 'client') {
+                console.warn('Expected client role but got:', role);
+            }
+        }
+
+        // Initialize
+        connect();
+    </script>
+</body>
+</html>

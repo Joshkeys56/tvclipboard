@@ -1,0 +1,243 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.container {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    max-width: 600px;
+    width: 100%;
+    padding: 40px;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 28px;
+}
+
+.subtitle {
+    text-align: center;
+    color: #666;
+    margin-bottom: 30px;
+    font-size: 14px;
+}
+
+.status {
+    text-align: center;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.status.connected {
+    background: #10b981;
+    color: white;
+}
+
+.status.disconnected {
+    background: #ef4444;
+    color: white;
+}
+
+.qr-section {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f3f4f6;
+    border-radius: 15px;
+}
+
+.qr-section h2 {
+    color: #333;
+    font-size: 18px;
+    margin-bottom: 15px;
+}
+
+#qrcode {
+    display: inline-block;
+    padding: 15px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+#qrcode img {
+    display: block;
+}
+
+.url-text {
+    margin-top: 15px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #666;
+    word-break: break-all;
+}
+
+.input-section {
+    margin-bottom: 30px;
+}
+
+.input-section h2 {
+    color: #333;
+    font-size: 18px;
+    margin-bottom: 15px;
+}
+
+textarea {
+    width: 100%;
+    min-height: 150px;
+    padding: 15px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 16px;
+    resize: vertical;
+    font-family: inherit;
+    transition: border-color 0.3s;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+button {
+    flex: 1;
+    padding: 15px 30px;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+.send-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.copy-btn {
+    background: #10b981;
+    color: white;
+}
+
+.clear-btn {
+    background: #ef4444;
+    color: white;
+}
+
+.received-section {
+    display: none;
+    padding: 20px;
+    background: #f3f4f6;
+    border-radius: 15px;
+    margin-bottom: 20px;
+    animation: slideIn 0.3s ease-out;
+}
+
+.received-section.show {
+    display: block;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.received-section h2 {
+    color: #333;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.received-content {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    border-left: 4px solid #667eea;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 14px;
+    color: #333;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.received-content.obfuscated {
+    filter: blur(4px);
+    user-select: none;
+    cursor: pointer;
+}
+
+.reveal-btn {
+    background: #f59e0b;
+    color: white;
+    margin-top: 10px;
+    font-size: 14px;
+    padding: 8px 16px;
+}
+
+.timestamp {
+    font-size: 12px;
+    color: #999;
+    margin-top: 10px;
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 25px;
+    }
+
+    h1 {
+        font-size: 24px;
+    }
+
+    .button-group {
+        flex-direction: column;
+    }
+}
+
+.mode-switch {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #999;
+}
