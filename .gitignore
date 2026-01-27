@@ -16,3 +16,7 @@ vendor/
 
 # Go workspace file
 go.work
+
+# NFS temporary files
+.nfs*
+
