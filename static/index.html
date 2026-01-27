@@ -65,21 +65,35 @@
 
         .mobile-mode .qr-section,
         .mobile-mode .received-section,
-        .mobile-mode .clear-btn,
-        .mobile-mode .copy-btn {
+        .mobile-mode .clear-btn {
             display: none;
         }
 
         .mobile-mode .button-group {
-            gap: 0;
+            gap: 10px;
         }
 
-        .mobile-mode .send-btn {
+        .mobile-mode .send-btn,
+        .mobile-mode .copy-btn {
             flex: 1;
         }
 
         .host-mode .input-section {
             display: none;
+        }
+
+        .received-content.obfuscated {
+            filter: blur(4px);
+            user-select: none;
+            cursor: pointer;
+        }
+
+        .reveal-btn {
+            background: #f59e0b;
+            color: white;
+            margin-top: 10px;
+            font-size: 14px;
+            padding: 8px 16px;
         }
 
         .qr-section {
@@ -285,6 +299,7 @@
             <h2>📥 Received</h2>
             <div id="received-content" class="received-content"></div>
             <div class="timestamp" id="timestamp"></div>
+            <button id="reveal-btn" class="reveal-btn" onclick="toggleReveal()">👁️ Show Content</button>
             <div class="button-group">
                 <button class="copy-btn" onclick="copyReceived()">Copy to Clipboard</button>
             </div>
@@ -294,6 +309,72 @@
     <script>
         let ws;
         let isHost = false;
+        let encryptionKey = null;
+        let receivedFullContent = '';
+        let isRevealed = false;
+        let sharedKey = 'tvclipboard-default-key'; // Default shared key
+
+        // Simple encryption using Web Crypto API
+        async function getKey() {
+            if (!encryptionKey) {
+                // Derive key from shared key string
+                const enc = new TextEncoder();
+                const keyMaterial = await crypto.subtle.importKey(
+                    "raw",
+                    enc.encode(sharedKey),
+                    { name: "PBKDF2" },
+                    false,
+                    ["deriveKey"]
+                );
+                encryptionKey = await crypto.subtle.deriveKey(
+                    {
+                        name: "PBKDF2",
+                        salt: enc.encode("tvclipboard-salt"),
+                        iterations: 1000,
+                        hash: "SHA-256"
+                    },
+                    keyMaterial,
+                    { name: "AES-GCM", length: 256 },
+                    true,
+                    ["encrypt", "decrypt"]
+                );
+            }
+            return encryptionKey;
+        }
+
+        async function encryptMessage(text) {
+            const key = await getKey();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encoded = new TextEncoder().encode(text);
+            const encrypted = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv },
+                key,
+                encoded
+            );
+
+            // Combine IV and encrypted data
+            const combined = new Uint8Array(iv.length + encrypted.byteLength);
+            combined.set(iv);
+            combined.set(new Uint8Array(encrypted), iv.length);
+
+            // Convert to base64
+            return btoa(String.fromCharCode(...combined));
+        }
+
+        async function decryptMessage(base64) {
+            const key = await getKey();
+            const combined = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+            const iv = combined.slice(0, 12);
+            const encrypted = combined.slice(12);
+
+            const decrypted = await crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: iv },
+                key,
+                encrypted
+            );
+
+            return new TextDecoder().decode(decrypted);
+        }
 
         function getWebSocketURL() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -361,7 +442,7 @@
             };
         }
 
-        function sendText() {
+        async function sendText() {
             const input = document.getElementById('input');
             const content = input.value.trim();
 
@@ -371,9 +452,11 @@
             }
 
             if (ws && ws.readyState === WebSocket.OPEN) {
+                // Encrypt the content
+                const encrypted = await encryptMessage(content);
                 const message = {
                     type: 'text',
-                    content: content
+                    content: encrypted
                 };
                 ws.send(JSON.stringify(message));
                 console.log('Sent message:', message);
@@ -431,20 +514,37 @@
             document.getElementById('input').value = '';
         }
 
-        function showReceivedContent(content, from) {
+        async function showReceivedContent(encryptedContent, from) {
             const section = document.getElementById('received-section');
             const contentDiv = document.getElementById('received-content');
             const timestamp = document.getElementById('timestamp');
+            const revealBtn = document.getElementById('reveal-btn');
 
-            contentDiv.textContent = content;
+            // Decrypt the content
+            const decrypted = await decryptMessage(encryptedContent);
+            receivedFullContent = decrypted;
+            isRevealed = false;
+
+            // Show obfuscated version (first 3 chars + ellipsis)
+            const obfuscated = decrypted.length > 3
+                ? decrypted.substring(0, 3) + '...'
+                : decrypted;
+
+            contentDiv.textContent = obfuscated;
+            contentDiv.classList.add('obfuscated');
+            contentDiv.onclick = toggleReveal;
             section.classList.add('show');
+
+            // Show reveal button
+            revealBtn.textContent = '👁️ Show Content';
+            revealBtn.style.display = 'inline-block';
 
             const now = new Date();
             timestamp.textContent = `Received at ${now.toLocaleTimeString()}`;
 
             // Try to copy to clipboard automatically
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(content)
+                navigator.clipboard.writeText(decrypted)
                     .then(() => {
                         console.log('Auto-copied to clipboard');
                     })
@@ -455,10 +555,8 @@
         }
 
         function copyReceived() {
-            const content = document.getElementById('received-content').textContent;
-
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(content)
+                navigator.clipboard.writeText(receivedFullContent)
                     .then(() => {
                         alert('Copied to clipboard!');
                     })
@@ -468,6 +566,30 @@
                     });
             } else {
                 alert('Clipboard not supported');
+            }
+        }
+
+        function toggleReveal() {
+            const contentDiv = document.getElementById('received-content');
+            const revealBtn = document.getElementById('reveal-btn');
+
+            if (isRevealed) {
+                // Hide content
+                const obfuscated = receivedFullContent.length > 3
+                    ? receivedFullContent.substring(0, 3) + '...'
+                    : receivedFullContent;
+                contentDiv.textContent = obfuscated;
+                contentDiv.classList.add('obfuscated');
+                contentDiv.onclick = toggleReveal;
+                revealBtn.textContent = '👁️ Show Content';
+                isRevealed = false;
+            } else {
+                // Show full content
+                contentDiv.textContent = receivedFullContent;
+                contentDiv.classList.remove('obfuscated');
+                contentDiv.onclick = null;
+                revealBtn.textContent = '🙈 Hide Content';
+                isRevealed = true;
             }
         }
 

@@ -7,6 +7,8 @@ A simple peer-to-peer clipboard sharing application written in Go. Share text be
 - 📱 **Device Agnostic**: Works on any device - desktop, tablet, or mobile
 - 🔄 **Real-time**: Uses WebSockets for instant text transmission
 - 📋 **Auto-Copy**: Automatically copies received text to clipboard
+- 🔒 **Encryption**: AES-GCM encryption to prevent casual packet sniffing
+- 👁️ **Privacy**: Password content obfuscated in received box (click to reveal)
 - 🚀 **Simple**: No installation required on mobile devices
 - 🔒 **P2P**: Direct connection between your devices
 - 🎯 **Host/Client Roles**: First device becomes host, others are clients
@@ -55,9 +57,12 @@ Navigate to any of the URLs shown in the console output (localhost works fine fo
 ## Tips
 
 - All connected devices receive messages sent by any client
-- Only the host sees the received messages box (other clients just send)
+- Only the host sees received messages box (other clients just send)
 - Perfect for phone-to-phone clipboard sharing!
 - Multiple clients can connect to the same host simultaneously
+- **Encryption**: Messages are encrypted with AES-GCM (same default key on all devices)
+  - For better security, edit the `sharedKey` variable in `static/index.html` and use a custom key
+- **Privacy**: Click on blurred received content to reveal it (protects passwords from prying eyes)
 
 ## Requirements
 
