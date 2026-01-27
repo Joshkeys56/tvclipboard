@@ -123,7 +123,7 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 
 		case broadcastMsg := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
 			for id, client := range h.clients {
 				// Don't send back to the sender
 				if id != broadcastMsg.From {
@@ -131,16 +131,12 @@ func (h *Hub) Run() {
 					case client.Send <- broadcastMsg.Message:
 					default:
 						log.Printf("Client %s send channel full, removing from hub", id)
-						h.mu.RUnlock()
-						h.mu.Lock()
 						close(client.Send)
 						delete(h.clients, id)
-						h.mu.Unlock()
-						h.mu.RLock()
 					}
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 
 		case <-h.stop:
 			// Stop signal received, exit the loop
@@ -151,7 +147,14 @@ func (h *Hub) Run() {
 
 // Stop gracefully stops the hub
 func (h *Hub) Stop() {
-	close(h.stop)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	select {
+	case <-h.stop:
+		// Already stopped
+	default:
+		close(h.stop)
+	}
 }
 
 // ReadPump reads messages from the WebSocket connection
@@ -201,6 +204,8 @@ func (c *Client) WritePump() {
 				log.Printf("WriteMessage error for client %s: %v", c.ID, err)
 				return
 			}
+		case <-c.Hub.stop:
+			return
 		}
 	}
 }

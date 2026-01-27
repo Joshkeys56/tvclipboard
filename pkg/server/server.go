@@ -15,12 +15,13 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// In production, you should validate the origin
+		// SECURITY: In production, you should validate the origin
+		// Allow only your trusted domains to prevent CSRF attacks
 		// For development, allow all origins
 		return true
 	},
 	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	WriteBufferSize:  1024,
 }
 
 // Server handles HTTP requests and WebSocket connections
@@ -124,7 +125,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	hostExists := s.hub.HasHost()
 
-	log.Printf("WebSocket connection attempt from %s, token: %q, hostExists: %v", r.RemoteAddr, token, hostExists)
+	log.Printf("WebSocket connection attempt, token: %q, hostExists: %v", token, hostExists)
 
 	// Require token for client connections (when host already exists)
 	if hostExists {
@@ -153,7 +154,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("WebSocket connection established from %s", r.RemoteAddr)
+	log.Printf("WebSocket connection established")
 
 	mobile := r.URL.Query().Get("mobile") == "true"
 	client := hub.NewClient(conn, s.hub, mobile)
