@@ -40,11 +40,11 @@ Navigate to any of the URLs shown in the console output (localhost works fine fo
 
 ### 4. Connect your mobile device
 - The first device to connect becomes **Host** - it shows QR code and received text
-- Scan the QR code with another device or open the network URL
-- Additional devices connect as **Clients** - they have a simple interface for sending only
+- Scan the QR code with another device - it automatically opens as Client
+- Additional devices can also open the URL with `?mode=client` to be Clients
 
 ### 5. Start sharing!
-- **From Host**: See the QR code and received text box (text auto-copies to clipboard) - no input area
+- **From Host**: See QR code and received text box (text auto-copies to clipboard)
 - **From Client**: Paste text and click "Send" - simple sending interface only
 - Text automatically appears on the other device(s) and copies to clipboard
 
