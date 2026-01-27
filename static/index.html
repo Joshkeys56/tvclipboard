@@ -452,15 +452,27 @@
             }
 
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // Encrypt the content
-                const encrypted = await encryptMessage(content);
-                const message = {
-                    type: 'text',
-                    content: encrypted
-                };
-                ws.send(JSON.stringify(message));
-                console.log('Sent message:', message);
-                input.value = '';
+                try {
+                    // Encrypt the content
+                    const encrypted = await encryptMessage(content);
+                    const message = {
+                        type: 'text',
+                        content: encrypted
+                    };
+                    ws.send(JSON.stringify(message));
+                    console.log('Sent message:', message);
+                    input.value = '';
+                } catch (error) {
+                    console.error('Encryption failed:', error);
+                    // Fallback to sending unencrypted
+                    const message = {
+                        type: 'text',
+                        content: content
+                    };
+                    ws.send(JSON.stringify(message));
+                    console.log('Sent unencrypted message:', message);
+                    input.value = '';
+                }
             } else {
                 alert('Not connected. Please wait...');
             }
@@ -520,8 +532,16 @@
             const timestamp = document.getElementById('timestamp');
             const revealBtn = document.getElementById('reveal-btn');
 
-            // Decrypt the content
-            const decrypted = await decryptMessage(encryptedContent);
+            let decrypted;
+            try {
+                // Try to decrypt the content
+                decrypted = await decryptMessage(encryptedContent);
+            } catch (error) {
+                console.error('Decryption failed:', error);
+                // If decryption fails, content is unencrypted
+                decrypted = encryptedContent;
+            }
+
             receivedFullContent = decrypted;
             isRevealed = false;
 
