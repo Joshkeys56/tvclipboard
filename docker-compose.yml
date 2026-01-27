@@ -19,18 +19,16 @@ services:
       # Port to listen on (default: 3333)
       - PORT=3333
 
-      # Public base URL for QR codes (e.g., https://example.com)
-      # If not set, automatically detects local IP address
-      # Useful for deployments with public domain names
-      - TVCLIPBOARD_PUBLIC_URL=https://example.com
+      # Public base URL for QR codes (e.g., http://192.168.0.111:3333)
+      # If not set, automatically detects local IP address (but uses Docker internal IP in containers)
+      # Set this to your server's public address so QR codes work correctly
+      # Example for local network: http://192.168.0.111:3333
+      # Example for public domain: https://yourdomain.com
+      # - TVCLIPBOARD_PUBLIC_URL=http://192.168.0.111:3333
 
       # Session timeout in minutes (default: 10)
       # After this time, QR codes expire and clients are disconnected
       - TVCLIPBOARD_SESSION_TIMEOUT=10
-
-      # Public base URL for QR codes (e.g., https://example.com)
-      # Set this for public deployments so QR codes use your domain instead of local IP
-      - TVCLIPBOARD_PUBLIC_URL=https://example.com
 
       # Optional: 32-byte hex private key for token encryption
       # If not set, a random key is generated on each container restart
