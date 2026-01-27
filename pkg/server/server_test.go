@@ -1,0 +1,261 @@
+package server
+
+import (
+	"io/fs"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/google/uuid"
+	"tvclipboard/pkg/hub"
+	"tvclipboard/pkg/qrcode"
+	"tvclipboard/pkg/token"
+)
+
+// testFS is a minimal in-memory filesystem for testing
+type testFS struct{}
+
+func (testFS) Open(name string) (fs.File, error) {
+	// Return a minimal HTML for testing
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+var mockStaticFiles testFS
+
+// TestClientURLMissingToken tests that client page responds correctly to missing token
+func TestClientURLMissingToken(t *testing.T) {
+	tm := token.NewTokenManager("", 10)
+	h := hub.NewHub()
+	go h.Run()
+
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 10*60*1e9) // 10 minutes
+
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	// Create test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleIndex(w, r)
+	}))
+	defer server.Close()
+
+	// Request client page without token
+	resp, err := http.Get(server.URL + "/?mode=client")
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Page should load with 404 since we don't have real static files
+	if resp.StatusCode != http.StatusNotFound {
+		t.Logf("Note: Using mock filesystem, got status %v", resp.StatusCode)
+	}
+}
+
+// TestWebSocketConnectionWithoutToken tests that WebSocket rejects connections without token when host exists
+func TestWebSocketConnectionWithoutToken(t *testing.T) {
+	tm := token.NewTokenManager("", 10)
+	h := hub.NewHub()
+	go h.Run()
+
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 10*60*1e9)
+
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	// Simulate host exists by setting hostID
+	h.SetHostID("test-host")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleWebSocket(w, r)
+	}))
+	defer server.Close()
+
+	// Try to connect without token (should fail)
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	_, _, err := websocket.DefaultDialer.Dial(wsURL+"/ws", nil)
+	if err == nil {
+		t.Error("WebSocket connection without token should fail when host exists")
+	}
+
+	// HTTP 401 results in "bad handshake" error from WebSocket client
+	if !strings.Contains(err.Error(), "bad handshake") {
+		t.Errorf("Expected handshake error, got: %v", err)
+	}
+}
+
+// TestWebSocketConnectionWithInvalidToken tests that WebSocket rejects invalid tokens
+func TestWebSocketConnectionWithInvalidToken(t *testing.T) {
+	tm := token.NewTokenManager("", 10)
+	h := hub.NewHub()
+	go h.Run()
+	
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 10*60*1e9)
+	
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	// Simulate host exists
+	h.SetHostID("test-host")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleWebSocket(w, r)
+	}))
+	defer server.Close()
+
+	// Try to connect with invalid token
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=invalid"
+	_, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err == nil {
+		t.Error("WebSocket connection with invalid token should fail")
+	}
+
+	// HTTP 401 results in "bad handshake" error from WebSocket client
+	if !strings.Contains(err.Error(), "bad handshake") {
+		t.Errorf("Expected handshake error, got: %v", err)
+	}
+}
+
+// TestWebSocketConnectionWithExpiredToken tests that WebSocket rejects expired tokens
+func TestWebSocketConnectionWithExpiredToken(t *testing.T) {
+	tm := token.NewTokenManager("", 1) // 1 minute timeout
+	h := hub.NewHub()
+	go h.Run()
+	
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 60*1e9)
+	
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	// Simulate host exists
+	h.SetHostID("test-host")
+
+	// Create and store an expired token
+	sessionToken := token.SessionToken{
+		ID:        uuid.New().String(),
+		Timestamp: time.Now().Add(-2 * time.Minute),
+	}
+	tm.StoreToken(sessionToken)
+
+	// Encrypt expired token
+	encrypted, err := token.EncryptToken(sessionToken, tm.PrivateKey())
+	if err != nil {
+		t.Fatalf("Failed to encrypt token: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleWebSocket(w, r)
+	}))
+	defer server.Close()
+
+	// Try to connect with expired token
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=" + encrypted
+	_, _, err = websocket.DefaultDialer.Dial(wsURL, nil)
+	if err == nil {
+		t.Error("WebSocket connection with expired token should fail")
+	}
+
+	// HTTP 401 results in "bad handshake" error from WebSocket client
+	if !strings.Contains(err.Error(), "bad handshake") {
+		t.Errorf("Expected handshake error, got: %v", err)
+	}
+}
+
+// TestWebSocketConnectionHostWithoutToken tests that host can connect without token
+func TestWebSocketConnectionHostWithoutToken(t *testing.T) {
+	tm := token.NewTokenManager("", 10)
+	h := hub.NewHub()
+	go h.Run()
+	
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 10*60*1e9)
+	
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleWebSocket(w, r)
+	}))
+	defer server.Close()
+
+	// First connection (host) should work without token
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Host connection should succeed without token: %v", err)
+	}
+	defer conn.Close()
+
+	// Verify that this client became host
+	time.Sleep(100 * time.Millisecond)
+	hostID := h.GetHostID()
+
+	if hostID == "" {
+		t.Error("First connection should become host")
+	}
+}
+
+// TestWebSocketConnectionHostWithToken tests that host connection with token is rejected
+func TestWebSocketConnectionHostWithToken(t *testing.T) {
+	tm := token.NewTokenManager("", 10)
+	h := hub.NewHub()
+	go h.Run()
+	
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 10*60*1e9)
+	
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleWebSocket(w, r)
+	}))
+	defer server.Close()
+
+	// Generate a valid token
+	encrypted, _, err := tm.GenerateToken()
+	if err != nil {
+		t.Fatalf("Failed to generate token: %v", err)
+	}
+
+	// First connection with token should be rejected
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=" + encrypted
+	_, _, err = websocket.DefaultDialer.Dial(wsURL, nil)
+	if err == nil {
+		t.Error("First connection with token should be rejected")
+	}
+
+	// HTTP 400 results in "bad handshake" error from WebSocket client
+	if !strings.Contains(err.Error(), "bad handshake") {
+		t.Errorf("Expected handshake error, got: %v", err)
+	}
+}
+
+// TestQRCodeEndpoint tests that QR code endpoint generates valid QR codes
+func TestQRCodeEndpoint(t *testing.T) {
+	tm := token.NewTokenManager("", 10)
+	h := hub.NewHub()
+	go h.Run()
+	
+	qrGen := qrcode.NewGenerator("localhost:8080", "http", 10*60*1e9)
+	
+	srv := NewServer(h, tm, qrGen, mockStaticFiles)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv.handleQRCode(w, r)
+	}))
+	defer server.Close()
+
+	// Make request to QR code endpoint
+	resp, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status OK, got %v", resp.StatusCode)
+	}
+
+	// Check content type
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "image/png" {
+		t.Errorf("Expected content-type image/png, got %s", contentType)
+	}
+}

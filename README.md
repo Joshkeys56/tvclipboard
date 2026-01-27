@@ -70,6 +70,29 @@ Navigate to any of the URLs shown in the console output (localhost works fine fo
   - On `http://` (like local network), use long-press in textarea → "Paste"
   - Paste button works on `https://` or `localhost://`
 
+## Architecture
+
+The codebase is organized into focused, maintainable packages following Go best practices:
+
+```
+tvclipboard/
+├── main.go           # Application entry point (wires packages together)
+└── pkg/
+    ├── token/         # Session management and encryption
+    ├── hub/           # WebSocket hub and client management
+    ├── qrcode/        # QR code generation
+    ├── server/         # HTTP handlers and routing
+    └── config/        # Configuration and environment variables
+```
+
+### Package Responsibilities
+
+- **pkg/token**: Session token generation, AES-GCM encryption, validation, cleanup
+- **pkg/hub**: WebSocket connection management, message broadcasting, role assignment
+- **pkg/qrcode**: QR code generation, HTML injection for session timeout
+- **pkg/server**: HTTP route handlers, WebSocket upgrades, static file serving
+- **pkg/config**: Environment variable parsing, IP detection, startup logging
+
 ## Testing
 
 TV Clipboard includes a comprehensive test suite covering all major functionality:
@@ -78,50 +101,55 @@ TV Clipboard includes a comprehensive test suite covering all major functionalit
 
 ```bash
 # Run all tests
-go test -v
+go test ./... -v
 
 # Run tests with coverage
-go test -v -cover
+go test ./... -cover
 
 # Run specific test
-go test -v -run TestTokenGeneration
+go test ./pkg/token -v -run TestTokenGeneration
 ```
 
 ### Test Coverage
 
-The test suite includes 33 tests covering:
+The test suite includes 46 tests covering:
 
-**Session Management (15 tests)**
+**pkg/token (17 tests)**
 - Token generation with valid format
 - Token encryption/decryption with AES-GCM
 - Token validation (valid, invalid, expired, not found)
 - Token cleanup of expired sessions
 - Private key generation from hex string or random
+- Token timeout configuration
+- Multiple concurrent tokens
+- Token JSON encoding/decoding
 
-**QR Code Generation (2 tests)**
+**pkg/hub (12 tests)**
+- Message broadcasting to all clients except sender
+- Concurrent message handling
+- Client connection and reconnection
+- Long message handling (10KB)
+- Message type validation (text, role)
+- Message size limits (up to 100KB)
+- Empty messages
+- Messages with quotes and special characters
+- Multiline messages
+- Encryption compatibility with various content types
+
+**pkg/qrcode (5 tests)**
 - QR code endpoint returns valid PNG format
 - QR code URL contains proper token parameter
+- QR code generator configuration
+- Session timeout HTML injection
+- HTML replacement utilities
 
-**Client URL Handling (3 tests)**
-- Client page responds to missing token
-- Client page contains error handling JavaScript
-
-**WebSocket Connection (4 tests)**
+**pkg/server (7 tests)**
 - Host connection without token succeeds
 - Host connection with token is rejected
 - Client connection without token is rejected when host exists
 - Client connection with invalid/expired token is rejected
-
-**Message Flow (9 tests)**
-- Message broadcasting to all clients except sender
-- Complete message flow from client to host
-- Encryption compatibility with various content types
-- Long messages (10KB, 100KB)
-- Empty messages
-- Messages with quotes and special characters
-- Multiline messages
-- Concurrent message handling
-- Client reconnection
+- QR code endpoint generation
+- Client URL handling
 
 ### Test Coverage
 
@@ -133,6 +161,8 @@ Current test coverage focuses on:
 - QR code generation
 
 Note: Client-side encryption (using Web Crypto API in JavaScript) is tested through integration tests that verify complete message flow between clients and host.
+
+The main.go file is minimal (~47 lines) and only wires the packages together. All business logic is encapsulated in focused packages for maintainability and testability.
 
 ## Requirements
 
