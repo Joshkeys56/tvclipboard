@@ -146,3 +146,89 @@ func TestLoadNegativeTimeout(t *testing.T) {
 		t.Errorf("Expected default timeout 10m for negative env, got %v", cfg.SessionTimeout)
 	}
 }
+
+func TestGetQRHostDefault(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	cfg := Load()
+
+	expectedHost := cfg.LocalIP
+	if cfg.GetQRHost() != expectedHost {
+		t.Errorf("Expected GetQRHost to return local IP %s, got %s", expectedHost, cfg.GetQRHost())
+	}
+}
+
+func TestGetQRHostPublicURL(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Setenv("TVCLIPBOARD_PUBLIC_URL", "https://example.io")
+	defer os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	cfg := Load()
+
+	if cfg.GetQRHost() != "example.io" {
+		t.Errorf("Expected GetQRHost to return example.io, got %s", cfg.GetQRHost())
+	}
+}
+
+func TestGetQRHostPublicURLWithPort(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Setenv("TVCLIPBOARD_PUBLIC_URL", "https://example.io:3333")
+	defer os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	cfg := Load()
+
+	if cfg.GetQRHost() != "example.io:3333" {
+		t.Errorf("Expected GetQRHost to return example.io:3333, got %s", cfg.GetQRHost())
+	}
+}
+
+func TestGetQRSchemeDefault(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	cfg := Load()
+
+	if cfg.GetQRScheme() != "http" {
+		t.Errorf("Expected GetQRScheme to return http, got %s", cfg.GetQRScheme())
+	}
+}
+
+func TestGetQRSchemePublicURL(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Setenv("TVCLIPBOARD_PUBLIC_URL", "https://example.io")
+	defer os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	cfg := Load()
+
+	if cfg.GetQRScheme() != "https" {
+		t.Errorf("Expected GetQRScheme to return https, got %s", cfg.GetQRScheme())
+	}
+}
+
+func TestGetQRSchemePublicURLWithoutScheme(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Setenv("TVCLIPBOARD_PUBLIC_URL", "example.io")
+	defer os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	cfg := Load()
+
+	if cfg.GetQRScheme() != "http" {
+		t.Errorf("Expected GetQRScheme to return http, got %s", cfg.GetQRScheme())
+	}
+}
+
+func TestPublicURLFromCLI(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	os.Unsetenv("TVCLIPBOARD_PUBLIC_URL")
+
+	oldArgs := os.Args
+	os.Args = []string{"tvclipboard", "--base-url", "https://example.com"}
+	defer func() { os.Args = oldArgs }()
+
+	cfg := Load()
+
+	if cfg.PublicURL != "https://example.com" {
+		t.Errorf("Expected PublicURL from CLI, got %s", cfg.PublicURL)
+	}
+}

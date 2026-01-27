@@ -29,8 +29,8 @@ func main() {
 	)
 
 	qrGen := qrcode.NewGenerator(
-		cfg.LocalIP+":"+cfg.Port,
-		"http",
+		cfg.GetQRHost()+":"+cfg.Port,
+		cfg.GetQRScheme(),
 		cfg.SessionTimeout,
 	)
 

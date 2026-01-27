@@ -19,16 +19,19 @@ A simple peer-to-peer clipboard sharing application written in Go. Share text be
 ## Usage
 
 ### 1. Build the binary
+
 ```bash
 go build -o tvclipboard
 ```
 
 ### 2. Run the server
+
 ```bash
 ./tvclipboard
 ```
 
 The server will automatically detect your local IP address and start on port 3333. You'll see output like:
+
 ```
 Server starting on port 3333
 Local access: http://localhost:3333
@@ -38,19 +41,23 @@ Open in browser and scan QR code with your phone
 ```
 
 ### 3. Open in your browser
+
 Navigate to any of the URLs shown in the console output (localhost works fine for desktop access)
 
 ### 4. Connect your mobile device
+
 - The first device to connect becomes **Host** - it shows QR code and received text
 - Scan the QR code with another device - it automatically opens as Client
 - Additional devices can also open the URL with `?mode=client` to be Clients
 
-### 5. Start sharing!
+### 5. Start sharing
+
 - **From Host**: See QR code and received text box (text auto-copies to clipboard)
 - **From Client**: Paste text and click "Send" - simple sending interface only
 - Text automatically appears on the other device(s) and copies to clipboard
 
 **How Roles Work:**
+
 - **Host Mode**: First client to connect. Shows QR code and received content.
 - **Client Mode**: Subsequent clients. Simplified interface for sending only.
 - Works for phone-to-phone, desktop-to-phone, or any combination!
@@ -112,9 +119,10 @@ go test ./pkg/token -v -run TestTokenGeneration
 
 ### Test Coverage
 
-The test suite includes 54 tests covering:
+The test suite includes 62 tests covering:
 
 **pkg/config (6 tests)**
+
 - Default configuration loading
 - Environment variable configuration
 - CLI argument configuration
@@ -122,6 +130,7 @@ The test suite includes 54 tests covering:
 - Invalid/zero/negative timeout handling
 
 **pkg/token (17 tests)**
+
 - Token generation with valid format
 - Token encryption/decryption with AES-GCM
 - Token validation (valid, invalid, expired, not found)
@@ -132,6 +141,7 @@ The test suite includes 54 tests covering:
 - Token JSON encoding/decoding
 
 **pkg/hub (12 tests)**
+
 - Message broadcasting to all clients except sender
 - Concurrent message handling
 - Client connection and reconnection
@@ -144,6 +154,7 @@ The test suite includes 54 tests covering:
 - Encryption compatibility with various content types
 
 **pkg/qrcode (5 tests)**
+
 - QR code endpoint returns valid PNG format
 - QR code URL contains proper token parameter
 - QR code generator configuration
@@ -151,6 +162,7 @@ The test suite includes 54 tests covering:
 - HTML replacement utilities
 
 **pkg/server (9 tests)**
+
 - Host connection without token succeeds
 - Host connection with token is rejected
 - Client connection without token is rejected when host exists
@@ -163,6 +175,7 @@ The test suite includes 54 tests covering:
 ### Test Coverage
 
 Current test coverage focuses on:
+
 - Session token generation and validation
 - WebSocket connection lifecycle
 - Message serialization/deserialization
@@ -187,6 +200,7 @@ The main.go file is minimal (~47 lines) and only wires the packages together. Al
 ## Security
 
 ### Session Management
+
 TV Clipboard includes session-based security to prevent unauthorized access:
 
 - **Time-Limited QR Codes**: Each QR code contains an encrypted token that expires after a configurable timeout (default: 10 minutes)
@@ -199,18 +213,29 @@ TV Clipboard includes session-based security to prevent unauthorized access:
 You can configure session security using environment variables:
 
 #### `TVCLIPBOARD_PRIVATE_KEY`
+
 - 32-byte hexadecimal string used to encrypt session tokens
 - If not set, a random key is generated on each server restart
 - Example: `TVCLIPBOARD_PRIVATE_KEY="a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"`
 
 #### `TVCLIPBOARD_SESSION_TIMEOUT`
+
 - Session timeout in minutes (integer)
 - Default: 10 minutes
 - Example: `TVCLIPBOARD_SESSION_TIMEOUT=15`
 
+#### `TVCLIPBOARD_PUBLIC_URL`
+
+- Public base URL for QR codes (full URL or just scheme://host)
+- If not set, automatically detects local IP address
+- Useful for deployments with public domain names
+- Example: `TVCLIPBOARD_PUBLIC_URL=https://example.com`
+- Example: `TVCLIPBOARD_PUBLIC_URL=https://example.com:3333`
+
 ### Usage Examples
 
 **Option 1: Environment Variables**
+
 ```bash
 # Set custom private key and 15-minute timeout
 export TVCLIPBOARD_PRIVATE_KEY="your-32-byte-hex-key-here"
@@ -219,6 +244,7 @@ export TVCLIPBOARD_SESSION_TIMEOUT=15
 ```
 
 **Option 2: CLI Arguments (simpler for direct usage)**
+
 ```bash
 # Show help
 ./tvclipboard --help
@@ -229,20 +255,26 @@ export TVCLIPBOARD_SESSION_TIMEOUT=15
 # Run with custom private key
 ./tvclipboard --key "deadbeef1234567890abcdef1234567890"
 
+# Run with public domain for QR codes
+./tvclipboard --base-url "https://example.com"
+
 # Combine all options
-./tvclipboard --port 8080 --expires 15 --key "your-key-here"
+./tvclipboard --port 8080 --base-url "https://example.com" --expires 15 --key "your-key-here"
 ```
 
 **Configuration Priority:** CLI flags override environment variables, which override defaults.
 
 ### Token Encryption
+
 Session tokens are encrypted using AES-GCM with your private key:
+
 - Each token contains a random UUID and timestamp
 - Tokens are stored server-side and validated on connection
 - Expired tokens are automatically cleaned up every minute
 - Invalid or expired connections are rejected with HTTP 401
 
 ### Security Notes
+
 - Tokens are included in QR code URLs, so anyone who scans QR code can connect
 - Session timeout limits how long a QR code remains valid
 - Private key rotation requires server restart (new QR code generation)

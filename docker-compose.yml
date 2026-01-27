@@ -2,6 +2,7 @@ services:
   tvclipboard:
     # Build from local Dockerfile (for development/testing)
     build: .
+    # image: akitaonrails/tvclipboard:latest
 
     # OR pull from Docker Hub (uncomment for production use)
     # image: akitaonrails/tvclipboard:latest
@@ -18,9 +19,18 @@ services:
       # Port to listen on (default: 3333)
       - PORT=3333
 
+      # Public base URL for QR codes (e.g., https://example.com)
+      # If not set, automatically detects local IP address
+      # Useful for deployments with public domain names
+      - TVCLIPBOARD_PUBLIC_URL=https://example.com
+
       # Session timeout in minutes (default: 10)
       # After this time, QR codes expire and clients are disconnected
       - TVCLIPBOARD_SESSION_TIMEOUT=10
+
+      # Public base URL for QR codes (e.g., https://example.com)
+      # Set this for public deployments so QR codes use your domain instead of local IP
+      - TVCLIPBOARD_PUBLIC_URL=https://example.com
 
       # Optional: 32-byte hex private key for token encryption
       # If not set, a random key is generated on each container restart
