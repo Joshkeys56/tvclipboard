@@ -34,10 +34,15 @@ type Client struct {
 type Hub struct {
 	clients    map[string]*Client
 	hostID     string
-	broadcast  chan []byte
+	broadcast  chan BroadcastMessage
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
+}
+
+type BroadcastMessage struct {
+	Message []byte
+	From    string // Don't send back to this client
 }
 
 type Message struct {
@@ -50,7 +55,7 @@ type Message struct {
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[string]*Client),
-		broadcast:  make(chan []byte, 256),
+		broadcast:  make(chan BroadcastMessage, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
@@ -106,14 +111,17 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 
-		case message := <-h.broadcast:
+		case broadcastMsg := <-h.broadcast:
 			h.mu.RLock()
-			for _, client := range h.clients {
-				select {
-				case client.Send <- message:
-				default:
-					close(client.Send)
-					delete(h.clients, client.ID)
+			for id, client := range h.clients {
+				// Don't send back to the sender
+				if id != broadcastMsg.From {
+					select {
+					case client.Send <- broadcastMsg.Message:
+					default:
+						close(client.Send)
+						delete(h.clients, id)
+					}
 				}
 			}
 			h.mu.RUnlock()
@@ -136,10 +144,14 @@ func (c *Client) ReadPump() {
 		// Parse message
 		var msg Message
 		if err := json.Unmarshal(message, &msg); err == nil {
-			// Broadcast to all other clients
+			// Broadcast to all other clients (not back to sender)
 			msg.From = c.ID
 			msgBytes, _ := json.Marshal(msg)
-			c.Hub.broadcast <- msgBytes
+			broadcastMsg := BroadcastMessage{
+				Message: msgBytes,
+				From:    c.ID,
+			}
+			c.Hub.broadcast <- broadcastMsg
 			log.Printf("Message from %s: %s", c.ID, msg.Content)
 		}
 	}
