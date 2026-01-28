@@ -52,7 +52,7 @@ var mockStaticFiles testFS
 // TestClientURLMissingToken tests that client page responds correctly to missing token
 func TestClientURLMissingToken(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9) // 10 minutes
@@ -81,7 +81,7 @@ func TestClientURLMissingToken(t *testing.T) {
 // TestWebSocketConnectionWithoutToken tests that WebSocket rejects connections without token when host exists
 func TestWebSocketConnectionWithoutToken(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
@@ -112,7 +112,7 @@ func TestWebSocketConnectionWithoutToken(t *testing.T) {
 // TestWebSocketConnectionWithInvalidToken tests that WebSocket rejects invalid tokens
 func TestWebSocketConnectionWithInvalidToken(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 	
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
@@ -143,7 +143,7 @@ func TestWebSocketConnectionWithInvalidToken(t *testing.T) {
 // TestWebSocketConnectionWithExpiredToken tests that WebSocket rejects expired tokens
 func TestWebSocketConnectionWithExpiredToken(t *testing.T) {
 	tm := token.NewTokenManager("", 1) // 1 minute timeout
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 	
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 60*1e9)
@@ -187,7 +187,7 @@ func TestWebSocketConnectionWithExpiredToken(t *testing.T) {
 // TestWebSocketConnectionHostWithoutToken tests that host can connect without token
 func TestWebSocketConnectionHostWithoutToken(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 	
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
@@ -219,7 +219,7 @@ func TestWebSocketConnectionHostWithoutToken(t *testing.T) {
 // TestWebSocketConnectionHostWithToken tests that host connection with token is rejected
 func TestWebSocketConnectionHostWithToken(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 	
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
@@ -253,7 +253,7 @@ func TestWebSocketConnectionHostWithToken(t *testing.T) {
 // TestQRCodeEndpoint tests that QR code endpoint generates valid QR codes
 func TestQRCodeEndpoint(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 	
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
@@ -287,7 +287,7 @@ func TestQRCodeEndpoint(t *testing.T) {
 // TestCacheBustingVersion tests that script tags include dynamic version parameter
 func TestCacheBustingVersion(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
@@ -324,7 +324,7 @@ func TestCacheBustingVersion(t *testing.T) {
 // TestVersionPattern tests that version string matches expected format
 func TestVersionPattern(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
-	h := hub.NewHub()
+	h := hub.NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)

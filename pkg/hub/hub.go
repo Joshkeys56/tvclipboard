@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -11,22 +12,27 @@ import (
 
 // Client represents a WebSocket client connection
 type Client struct {
-	ID     string
-	Conn   *websocket.Conn
-	Send   chan []byte
-	Hub    *Hub
-	Mobile bool
+	ID          string
+	Conn         *websocket.Conn
+	Send         chan []byte
+	Hub          *Hub
+	Mobile       bool
+	lastMessage  time.Time
+	messageCount int
+	mu           sync.Mutex
 }
 
 // Hub manages all connected clients
 type Hub struct {
-	clients    map[string]*Client
-	hostID     string
-	broadcast  chan BroadcastMessage
-	Register   chan *Client
-	Unregister chan *Client
-	stop       chan struct{} // Channel to signal hub to stop
-	mu         sync.RWMutex
+	clients          map[string]*Client
+	hostID           string
+	broadcast        chan BroadcastMessage
+	Register         chan *Client
+	Unregister       chan *Client
+	stop             chan struct{}
+	mu               sync.RWMutex
+	maxMessageSize   int64
+	rateLimitPerSec  int
 }
 
 // BroadcastMessage represents a message to broadcast to clients
@@ -44,13 +50,16 @@ type Message struct {
 }
 
 // NewHub creates a new Hub
-func NewHub() *Hub {
+func NewHub(maxMessageSize int64, rateLimitPerSec int) *Hub {
 	return &Hub{
-		clients:    make(map[string]*Client),
-		broadcast:  make(chan BroadcastMessage, 256),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		stop:       make(chan struct{}),
+		clients:          make(map[string]*Client),
+		broadcast:        make(chan BroadcastMessage, 256),
+		Register:         make(chan *Client),
+		Unregister:       make(chan *Client),
+		stop:             make(chan struct{}),
+		mu:               sync.RWMutex{},
+		maxMessageSize:   maxMessageSize,
+		rateLimitPerSec:  rateLimitPerSec,
 	}
 }
 
@@ -157,6 +166,31 @@ func (h *Hub) Stop() {
 	}
 }
 
+// checkRateLimit checks if client has exceeded rate limit
+func (c *Client) checkRateLimit(hub *Hub) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	timeSinceLast := now.Sub(c.lastMessage)
+
+	// Reset count if more than a second has passed
+	if timeSinceLast >= time.Second {
+		c.messageCount = 0
+		c.lastMessage = now
+		return true
+	}
+
+	// Check if rate limit exceeded
+	if c.messageCount >= hub.rateLimitPerSec {
+		log.Printf("Rate limit exceeded for client %s", c.ID)
+		return false
+	}
+
+	c.messageCount++
+	return true
+}
+
 // ReadPump reads messages from the WebSocket connection
 func (c *Client) ReadPump() {
 	defer func() {
@@ -168,6 +202,17 @@ func (c *Client) ReadPump() {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			break
+		}
+
+		// Check message size
+		if int64(len(message)) > c.Hub.maxMessageSize {
+			log.Printf("Message too large from %s: %d bytes (max: %d)", c.ID, len(message), c.Hub.maxMessageSize)
+			continue
+		}
+
+		// Check rate limit
+		if !c.checkRateLimit(c.Hub) {
+			continue
 		}
 
 		// Parse message
@@ -243,10 +288,12 @@ func (h *Hub) SetHostID(id string) {
 // NewClient creates a new Client instance
 func NewClient(conn *websocket.Conn, hub *Hub, mobile bool) *Client {
 	return &Client{
-		ID:     uuid.New().String(),
-		Conn:   conn,
-		Send:   make(chan []byte, 256),
-		Hub:    hub,
-		Mobile: mobile,
+		ID:           uuid.New().String(),
+		Conn:         conn,
+		Send:         make(chan []byte, 256),
+		Hub:          hub,
+		Mobile:       mobile,
+		lastMessage:  time.Now(),
+		messageCount: 0,
 	}
 }

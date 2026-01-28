@@ -25,7 +25,7 @@ func main() {
 	cfg := config.Load()
 
 	// Initialize components
-	h := hub.NewHub()
+	h := hub.NewHub(cfg.MaxMessageSize, cfg.RateLimitPerSec)
 	go h.Run()
 
 	tokenManager := token.NewTokenManager(

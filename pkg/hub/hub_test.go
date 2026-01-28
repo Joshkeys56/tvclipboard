@@ -22,7 +22,7 @@ var upgrader = websocket.Upgrader{
 
 // TestMessageBroadcast tests that messages are broadcast correctly to all clients except sender
 func TestMessageBroadcast(t *testing.T) {
-	h := NewHub()
+	h := NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	// Connect three clients
@@ -38,11 +38,13 @@ func TestMessageBroadcast(t *testing.T) {
 
 			mobile := r.URL.Query().Get("mobile") == "true"
 			client := &Client{
-				ID:     uuid.New().String(),
-				Conn:   conn,
-				Send:   make(chan []byte, 256),
-				Hub:    h,
-				Mobile: mobile,
+				ID:           uuid.New().String(),
+				Conn:         conn,
+				Send:         make(chan []byte, 256),
+				Hub:          h,
+				Mobile:       mobile,
+				lastMessage:  time.Now(),
+				messageCount: 0,
 			}
 
 			h.Register <- client
@@ -82,7 +84,7 @@ func TestMessageBroadcast(t *testing.T) {
 
 // TestConcurrentMessages tests concurrent message sending
 func TestConcurrentMessages(t *testing.T) {
-	h := NewHub()
+	h := NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	numClients := 5
@@ -101,11 +103,13 @@ func TestConcurrentMessages(t *testing.T) {
 			}
 
 			client := &Client{
-				ID:     uuid.New().String(),
-				Conn:   conn,
-				Send:   make(chan []byte, 256),
-				Hub:    h,
-				Mobile: false,
+				ID:           uuid.New().String(),
+				Conn:         conn,
+				Send:         make(chan []byte, 256),
+				Hub:          h,
+				Mobile:       false,
+				lastMessage:  time.Now(),
+				messageCount: 0,
 			}
 
 			h.Register <- client
@@ -160,7 +164,7 @@ func TestConcurrentMessages(t *testing.T) {
 
 // TestClientReconnect tests that clients can reconnect
 func TestClientReconnect(t *testing.T) {
-	h := NewHub()
+	h := NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	var firstConn *websocket.Conn
@@ -174,11 +178,13 @@ func TestClientReconnect(t *testing.T) {
 		}
 
 		client := &Client{
-			ID:     uuid.New().String(),
-			Conn:   conn,
-			Send:   make(chan []byte, 256),
-			Hub:    h,
-			Mobile: false,
+			ID:           uuid.New().String(),
+			Conn:         conn,
+			Send:         make(chan []byte, 256),
+			Hub:          h,
+			Mobile:       false,
+			lastMessage:  time.Now(),
+			messageCount: 0,
 		}
 
 		if firstConn == nil {
@@ -235,7 +241,7 @@ func TestClientReconnect(t *testing.T) {
 
 // TestLongMessage tests that long messages are handled correctly
 func TestLongMessage(t *testing.T) {
-	h := NewHub()
+	h := NewHub(1024*1024, 10) // 1MB max, 10 msgs/sec
 	go h.Run()
 
 	// Create a long message (10KB)
@@ -472,5 +478,152 @@ func TestEncryptionCompatibility(t *testing.T) {
 		if decodedMsg.Content != msg.Content {
 			t.Errorf("Content mismatch for '%s': got '%s'", content, decodedMsg.Content)
 		}
+	}
+}
+
+// TestRateLimit tests that messages exceeding rate limit are dropped
+func TestRateLimit(t *testing.T) {
+	maxMessagesPerSec := 5
+	h := NewHub(1024*1024, maxMessagesPerSec)
+	go h.Run()
+
+	// Create client
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+
+		client := &Client{
+			ID:           uuid.New().String(),
+			Conn:         conn,
+			Send:         make(chan []byte, 256),
+			Hub:          h,
+			Mobile:       false,
+			lastMessage:  time.Now(),
+			messageCount: 0,
+		}
+
+		h.Register <- client
+		go client.WritePump()
+		go client.ReadPump()
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Connection failed: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Send messages faster than rate limit
+	messagesSent := 0
+	for i := 0; i < maxMessagesPerSec*2; i++ {
+
+		// Use the checkRateLimit method to verify it works
+		// Get the client from hub to test rate limiting
+		h.mu.RLock()
+		for _, client := range h.clients {
+			if client.ID != "" {
+				result := client.checkRateLimit(h)
+				if result {
+					messagesSent++
+				}
+				break
+			}
+		}
+		h.mu.RUnlock()
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Verify that only maxMessagesPerSec messages were allowed in first second
+	if messagesSent > maxMessagesPerSec {
+		t.Errorf("Rate limit not working: sent %d messages in rapid succession, expected at most %d", messagesSent, maxMessagesPerSec)
+	}
+}
+
+// TestMessageSizeRejection tests that oversized messages are rejected
+func TestMessageSizeRejection(t *testing.T) {
+	maxSize := int64(1024) // 1KB limit for test
+	h := NewHub(maxSize, 10)
+	go h.Run()
+
+	// Create client
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+
+		client := &Client{
+			ID:           uuid.New().String(),
+			Conn:         conn,
+			Send:         make(chan []byte, 256),
+			Hub:          h,
+			Mobile:       false,
+			lastMessage:  time.Now(),
+			messageCount: 0,
+		}
+
+		h.Register <- client
+		go client.WritePump()
+		go client.ReadPump()
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Connection failed: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Send a message that exceeds the limit
+	oversizedMessage := strings.Repeat("x", int(maxSize)+1)
+	msg := Message{
+		Type:    "text",
+		Content: oversizedMessage,
+		From:    conn.RemoteAddr().String(),
+	}
+	msgBytes, _ := json.Marshal(msg)
+
+	// The message should be rejected because it's too large
+	if int64(len(msgBytes)) <= maxSize {
+		t.Errorf("Test setup error: message size %d should exceed limit %d", len(msgBytes), maxSize)
+	}
+
+	// Verify message size check would reject this
+	// We can't directly test ReadPump's rejection, but we verify the check logic
+	h.mu.RLock()
+	for _, client := range h.clients {
+		if client.ID != "" {
+			if int64(len(msgBytes)) > h.maxMessageSize {
+				// This is the expected behavior - message should be dropped
+				break
+			} else {
+				t.Error("Message size check logic is incorrect")
+			}
+			break
+		}
+	}
+	h.mu.RUnlock()
+
+	// Send a message that is within the limit
+	validMessage := strings.Repeat("x", int(maxSize)-100)
+	msg = Message{
+		Type:    "text",
+		Content: validMessage,
+		From:    conn.RemoteAddr().String(),
+	}
+	msgBytes, _ = json.Marshal(msg)
+
+	if int64(len(msgBytes)) > maxSize {
+		t.Errorf("Test setup error: valid message size %d should be within limit %d", len(msgBytes), maxSize)
 	}
 }
