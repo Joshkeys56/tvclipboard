@@ -90,7 +90,6 @@ type Server struct {
 	staticFiles    fs.FS
 	allowedOrigins []string
 	version        string
-	shutdown       chan struct{}
 }
 
 // NewServer creates a new Server instance
@@ -102,13 +101,12 @@ func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, stat
 		staticFiles:     staticFiles,
 		allowedOrigins:  allowedOrigins,
 		version:        time.Now().Format("20060102150405"),
-		shutdown:       make(chan struct{}),
 	}
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() {
-	close(s.shutdown)
+	// No-op: server shutdown is handled by http.Server.Shutdown()
 }
 
 // RegisterRoutes registers all HTTP routes
