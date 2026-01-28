@@ -76,7 +76,6 @@ func main() {
 	// Graceful shutdown
 	log.Println("Shutting down server...")
 	h.Stop()
-	tokenManager.Stop()
 	srv.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

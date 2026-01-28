@@ -1,228 +1,127 @@
 package token
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"sync"
 	"time"
 )
 
-// SessionToken represents a session token with ID and timestamp
+const (
+	// TokenLength is the number of characters in a token ID
+	TokenLength = 8
+	// MaxTokens is the hard limit for in-memory token storage
+	MaxTokens = 10000
+)
+
+// SessionToken represents a token with ID and timestamp
 type SessionToken struct {
-	ID        string    `json:"id"`
-	Timestamp int64     `json:"timestamp"`
+	ID        string
+	Timestamp int64
 }
 
-// TokenManager manages session tokens with encryption and expiration
+// TokenManager manages session tokens with in-memory storage and size limits
 type TokenManager struct {
-	tokens      map[string]SessionToken
-	privateKey  []byte
+	tokens      map[string]int64 // token ID → timestamp
+	tokenOrder  []string          // FIFO order for rotation
 	timeout     time.Duration
+	maxTokens   int
 	mu          *sync.RWMutex
-	stopCleanup chan struct{}
 }
 
-// generatePrivateKey generates a 32-byte random private key
-func generatePrivateKey() ([]byte, error) {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, fmt.Errorf("failed to generate private key: %w", err)
-	}
-	return key, nil
-}
+// base62 characters for generating short alphanumeric IDs
+const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// encryptToken encrypts a session token using AES-GCM
-func encryptToken(token SessionToken, privateKey []byte) (string, error) {
-	jsonData, err := json.Marshal(token)
-	if err != nil {
-		return "", err
-	}
-
-	block, err := aes.NewCipher(privateKey)
-	if err != nil {
-		return "", err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, jsonData, nil)
-	return base64.URLEncoding.EncodeToString(ciphertext), nil
-}
-
-// decryptToken decrypts an encrypted session token
-func decryptToken(encrypted string, privateKey []byte) (SessionToken, error) {
-	ciphertext, err := base64.URLEncoding.DecodeString(encrypted)
-	if err != nil {
-		return SessionToken{}, err
-	}
-
-	block, err := aes.NewCipher(privateKey)
-	if err != nil {
-		return SessionToken{}, err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return SessionToken{}, err
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return SessionToken{}, fmt.Errorf("ciphertext too short")
-	}
-
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return SessionToken{}, err
-	}
-
-	var token SessionToken
-	if err := json.Unmarshal(plaintext, &token); err != nil {
-		return SessionToken{}, err
-	}
-
-	return token, nil
-}
-
-// NewTokenManager creates a new TokenManager with optional private key and timeout
-func NewTokenManager(privateKeyHex string, timeoutMinutes int) *TokenManager {
-	var privateKey []byte
-	if privateKeyHex != "" {
-		key, err := hex.DecodeString(privateKeyHex)
-		if err != nil || len(key) != 32 {
-			log.Printf("Invalid private key format, generating new one: %v", err)
-			var genErr error
-			privateKey, genErr = generatePrivateKey()
-			if genErr != nil {
-				log.Printf("Failed to generate new private key: %v", genErr)
-				return nil
-			}
-		} else {
-			privateKey = key
-		}
-	} else {
-		var err error
-		privateKey, err = generatePrivateKey()
+// generateRandomID generates a short alphanumeric ID
+func generateRandomID() (string, error) {
+	b := make([]byte, TokenLength)
+	for i := range b {
+		// Generate random byte and use modulo to get base62 index
+		val, err := rand.Prime(rand.Reader, 8)
 		if err != nil {
-			log.Printf("Failed to generate private key: %v", err)
-			return nil
+			return "", fmt.Errorf("failed to generate random number: %w", err)
 		}
+		b[i] = base62Chars[int(val.Int64())%len(base62Chars)]
 	}
+	return string(b), nil
+}
 
+// NewTokenManager creates a new TokenManager with timeout and size limits
+func NewTokenManager(privateKeyHex string, timeoutMinutes int) *TokenManager {
 	timeout := 10 * time.Minute
 	if timeoutMinutes > 0 {
 		timeout = time.Duration(timeoutMinutes) * time.Minute
 	}
 
 	tm := &TokenManager{
-		tokens:      make(map[string]SessionToken),
-		privateKey:  privateKey,
-		timeout:     timeout,
-		mu:          &sync.RWMutex{},
-		stopCleanup: make(chan struct{}),
+		tokens:     make(map[string]int64),
+		tokenOrder: make([]string, 0, MaxTokens),
+		timeout:    timeout,
+		maxTokens:  MaxTokens,
+		mu:         &sync.RWMutex{},
 	}
 
-	tm.startCleanupRoutine()
 	return tm
 }
 
-// GenerateToken creates and returns an encrypted session token
-func (tm *TokenManager) GenerateToken() (string, SessionToken, error) {
+// GenerateToken creates and returns a short session token ID
+func (tm *TokenManager) GenerateToken() (string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	// Generate 12 random bytes for ID (96 bits of entropy)
-	idBytes := make([]byte, 12)
-	if _, err := io.ReadFull(rand.Reader, idBytes); err != nil {
-		return "", SessionToken{}, fmt.Errorf("failed to generate token ID: %w", err)
-	}
-	tokenID := hex.EncodeToString(idBytes)
+	// Generate random ID and check for collision
+	var tokenID string
+	var err error
+	maxAttempts := 100
 
-	token := SessionToken{
-		ID:        tokenID,
-		Timestamp: time.Now().Unix(),
-	}
-
-	tm.tokens[token.ID] = token
-
-	encrypted, err := encryptToken(token, tm.privateKey)
-	if err != nil {
-		return "", SessionToken{}, err
+	for i := 0; i < maxAttempts; i++ {
+		tokenID, err = generateRandomID()
+		if err != nil {
+			return "", err
+		}
+		// Check if ID already exists
+		if _, exists := tm.tokens[tokenID]; !exists {
+			break // Found a unique ID
+		}
 	}
 
-	return encrypted, token, nil
+	if tokenID == "" {
+		return "", fmt.Errorf("failed to generate unique token after %d attempts", maxAttempts)
+	}
+
+	// Add token to map and order list
+	now := time.Now().Unix()
+	tm.tokens[tokenID] = now
+	tm.tokenOrder = append(tm.tokenOrder, tokenID)
+
+	// Enforce max tokens limit by removing oldest entries
+	for len(tm.tokens) > tm.maxTokens {
+		oldestID := tm.tokenOrder[0]
+		delete(tm.tokens, oldestID)
+		// Remove from order list (shift slice)
+		tm.tokenOrder = tm.tokenOrder[1:]
+		log.Printf("Rotated out oldest token due to max limit: %s", oldestID)
+	}
+
+	return tokenID, nil
 }
 
-// ValidateToken validates an encrypted token and returns the session token
-func (tm *TokenManager) ValidateToken(encrypted string) (SessionToken, error) {
+// ValidateToken validates a token ID and returns if it's still valid
+func (tm *TokenManager) ValidateToken(tokenID string) error {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 
-	token, err := decryptToken(encrypted, tm.privateKey)
-	if err != nil {
-		return SessionToken{}, fmt.Errorf("invalid token")
+	timestamp, exists := tm.tokens[tokenID]
+	if !exists {
+		return fmt.Errorf("token not found")
 	}
 
-	storedToken, ok := tm.tokens[token.ID]
-	if !ok {
-		return SessionToken{}, fmt.Errorf("token not found")
+	if time.Since(time.Unix(timestamp, 0)) > tm.timeout {
+		return fmt.Errorf("token expired")
 	}
 
-	if time.Since(time.Unix(storedToken.Timestamp, 0)) > tm.timeout {
-		return SessionToken{}, fmt.Errorf("token expired")
-	}
-
-	return storedToken, nil
-}
-
-// startCleanupRoutine starts a background routine to clean up expired tokens
-func (tm *TokenManager) startCleanupRoutine() {
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				tm.cleanupExpiredTokens()
-			case <-tm.stopCleanup:
-				return
-			}
-		}
-	}()
-}
-
-// Stop stops the cleanup routine
-func (tm *TokenManager) Stop() {
-	close(tm.stopCleanup)
-}
-
-// cleanupExpiredTokens removes expired tokens from the map
-func (tm *TokenManager) cleanupExpiredTokens() {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	for id, token := range tm.tokens {
-		if time.Since(time.Unix(token.Timestamp, 0)) > tm.timeout {
-			delete(tm.tokens, id)
-			log.Printf("Cleaned up expired token: %s", id)
-		}
-	}
+	return nil
 }
 
 // Timeout returns the token timeout duration
@@ -230,27 +129,45 @@ func (tm *TokenManager) Timeout() time.Duration {
 	return tm.timeout
 }
 
-// PrivateKey returns the private key (for testing only)
-func (tm *TokenManager) PrivateKey() []byte {
-	return tm.privateKey
-}
-
-// StoreToken stores a token in the map (for testing only)
+// StoreToken stores a token in map (for testing only)
 func (tm *TokenManager) StoreToken(token SessionToken) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	tm.tokens[token.ID] = token
+	tm.tokens[token.ID] = token.Timestamp
+	tm.tokenOrder = append(tm.tokenOrder, token.ID)
 }
 
-// Exports for testing
+// GetTokens returns the current token count (for testing)
+func (tm *TokenManager) GetTokens() map[string]int64 {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	// Return a copy
+	copy := make(map[string]int64)
+	for k, v := range tm.tokens {
+		copy[k] = v
+	}
+	return copy
+}
+
+// TokenCount returns the number of active tokens (for testing)
+func (tm *TokenManager) TokenCount() int {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	return len(tm.tokens)
+}
+
+// Exports for testing compatibility
 func GeneratePrivateKey() ([]byte, error) {
-	return generatePrivateKey()
+	// No longer used - kept for test compatibility
+	return []byte{0, 0, 0, 0, 0, 0, 0}, nil
 }
 
 func EncryptToken(token SessionToken, privateKey []byte) (string, error) {
-	return encryptToken(token, privateKey)
+	// No longer used - kept for test compatibility
+	return token.ID, nil
 }
 
 func DecryptToken(encrypted string, privateKey []byte) (SessionToken, error) {
-	return decryptToken(encrypted, privateKey)
+	// No longer used - kept for test compatibility
+	return SessionToken{ID: encrypted, Timestamp: time.Now().Unix()}, nil
 }

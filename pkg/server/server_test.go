@@ -165,11 +165,8 @@ func TestWebSocketConnectionWithExpiredToken(t *testing.T) {
 	}
 	tm.StoreToken(sessionToken)
 
-	// Encrypt expired token
-	encrypted, err := token.EncryptToken(sessionToken, tm.PrivateKey())
-	if err != nil {
-		t.Fatalf("Failed to encrypt token: %v", err)
-	}
+	// Use the expired token ID directly
+	expiredTokenID := sessionToken.ID
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		srv.handleWebSocket(w, r)
@@ -177,8 +174,8 @@ func TestWebSocketConnectionWithExpiredToken(t *testing.T) {
 	defer server.Close()
 
 	// Try to connect with expired token
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=" + encrypted
-	_, _, err = websocket.DefaultDialer.Dial(wsURL, nil)
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=" + expiredTokenID
+	_, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err == nil {
 		t.Error("WebSocket connection with expired token should fail")
 	}
@@ -237,13 +234,13 @@ func TestWebSocketConnectionHostWithToken(t *testing.T) {
 	defer server.Close()
 
 	// Generate a valid token
-	encrypted, _, err := tm.GenerateToken()
+	tokenID, err := tm.GenerateToken()
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
 
 	// First connection with token should be rejected
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=" + encrypted
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws?token=" + tokenID
 	_, _, err = websocket.DefaultDialer.Dial(wsURL, nil)
 	if err == nil {
 		t.Error("First connection with token should be rejected")

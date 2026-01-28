@@ -172,14 +172,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 // handleQRCode generates and serves a QR code with an encrypted token
 func (s *Server) handleQRCode(w http.ResponseWriter, r *http.Request) {
 	// Generate new session token
-	encryptedToken, _, err := s.tokenManager.GenerateToken()
+	token, err := s.tokenManager.GenerateToken()
 	if err != nil {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 	log.Printf("Generated new session token (expires in %v)", s.tokenManager.Timeout())
 
-	s.qrGenerator.ServeQRCode(w, r, encryptedToken)
+	s.qrGenerator.ServeQRCode(w, r, token)
 }
 
 // handleWebSocket handles WebSocket connection upgrades
@@ -208,7 +208,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err := s.tokenManager.ValidateToken(token)
+		err := s.tokenManager.ValidateToken(token)
 		if err != nil {
 			log.Printf("Token validation failed: %v", err)
 			http.Error(w, "Unauthorized: invalid or expired token", http.StatusUnauthorized)
