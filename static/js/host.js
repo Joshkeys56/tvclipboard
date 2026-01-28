@@ -18,6 +18,7 @@
     try {
         // Try to decrypt content
         decrypted = await decryptMessage(encryptedContent);
+        console.log('Successfully decrypted message');
     } catch (error) {
         console.error('Decryption failed:', error);
         // If decryption fails, content is unencrypted
@@ -57,19 +58,35 @@
 }
 
 function copyReceived() {
+    console.log('copyReceived called, content length:', receivedFullContent.length);
+
+    if (!receivedFullContent) {
+        alert('No content to copy. Please receive a message first.');
+        return;
+    }
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(receivedFullContent)
             .then(() => {
+                console.log('Successfully copied to clipboard');
                 alert('Copied to clipboard!');
             })
             .catch(err => {
                 console.error('Failed to copy:', err);
-                alert('Failed to copy to clipboard');
+                alert('Failed to copy to clipboard: ' + err.message);
             });
     } else {
-        alert('Clipboard not supported');
+        console.error('Clipboard API not supported');
+        alert('Clipboard not supported in this browser');
     }
 }
+
+// Expose functions needed by HTML onclick handlers
+window.toggleReveal = toggleReveal;
+window.copyReceived = copyReceived;
+
+// Log that functions are exposed
+console.log('Host functions exposed: copyReceived, toggleReveal');
 
 function toggleReveal() {
     const contentDiv = document.getElementById('received-content');

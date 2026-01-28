@@ -2,9 +2,20 @@
 
 let encryptionKey = null;
 let sharedKey = 'tvclipboard-default-key'; // Default shared key
+let cryptoAvailable = window.crypto && window.crypto.subtle;
+
+console.log('Web Crypto API available:', cryptoAvailable);
+if (!cryptoAvailable) {
+    console.warn('Note: Web Crypto API is not available. This happens when accessing via HTTP (not HTTPS) and not on localhost. Messages will be sent unencrypted.');
+}
 
 // Simple encryption using Web Crypto API
 async function getKey() {
+    if (!cryptoAvailable) {
+        console.warn('Web Crypto API not available (needs HTTPS or localhost). Messages will be unencrypted.');
+        return null;
+    }
+
     if (!encryptionKey) {
         // Derive key from shared key string
         const enc = new TextEncoder();
@@ -32,7 +43,14 @@ async function getKey() {
 }
 
 async function encryptMessage(text) {
+    if (!cryptoAvailable) {
+        console.warn('Web Crypto API not available. Sending unencrypted message.');
+        return text; // Return plain text if crypto not available
+    }
+
     const key = await getKey();
+    if (!key) return text; // Fallback if key generation fails
+
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(text);
     const encrypted = await crypto.subtle.encrypt(
@@ -51,18 +69,30 @@ async function encryptMessage(text) {
 }
 
 async function decryptMessage(base64) {
+    if (!cryptoAvailable) {
+        console.warn('Web Crypto API not available. Received unencrypted message.');
+        return base64; // Return as-is if crypto not available
+    }
+
     const key = await getKey();
-    const combined = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-    const iv = combined.slice(0, 12);
-    const encrypted = combined.slice(12);
+    if (!key) return base64; // Fallback if key generation fails
 
-    const decrypted = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: iv },
-        key,
-        encrypted
-    );
+    try {
+        const combined = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        const iv = combined.slice(0, 12);
+        const encrypted = combined.slice(12);
 
-    return new TextDecoder().decode(decrypted);
+        const decrypted = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            key,
+            encrypted
+        );
+
+        return new TextDecoder().decode(decrypted);
+    } catch (error) {
+        console.error('Decryption failed:', error);
+        throw error;
+    }
 }
 
 function getWebSocketURL() {

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,15 +26,41 @@ func isOriginAllowed(origin string, allowedOrigins []string) bool {
 		return true
 	}
 	for _, allowed := range allowedOrigins {
+		// Exact match first (most common case)
+		if origin == allowed {
+			return true
+		}
 		// Check for wildcard at the end
 		if len(allowed) > 0 && allowed[len(allowed)-1] == '*' {
 			prefix := allowed[:len(allowed)-1]
-			if len(origin) >= len(prefix) && origin[:len(prefix)] == prefix {
+			// Remove port from origin when checking against wildcard prefix
+			// e.g., if allowed is "http://localhost:*" and origin is "http://localhost:3333",
+			// extract "http://localhost" from both for comparison
+			if matchesWildcard(origin, prefix) {
 				return true
 			}
 		}
-		// Exact match
-		if origin == allowed {
+	}
+	return false
+}
+
+// matchesWildcard checks if origin matches a wildcard prefix
+func matchesWildcard(origin, pattern string) bool {
+	// Remove trailing colon from pattern if present (from patterns like "http://localhost:*")
+	pattern = strings.TrimSuffix(pattern, ":")
+	
+	// Simple case: origin starts with pattern and either ends with port or equals pattern without :
+	if len(origin) >= len(pattern) {
+		originPrefix := origin[:len(pattern)]
+		if originPrefix != pattern {
+			return false
+		}
+		// If origin exactly matches pattern, allow it
+		if len(origin) == len(pattern) {
+			return true
+		}
+		// If origin is longer (has port), ensure next char is ':'
+		if origin[len(pattern)] == ':' {
 			return true
 		}
 	}
@@ -158,6 +185,16 @@ func (s *Server) handleQRCode(w http.ResponseWriter, r *http.Request) {
 // handleWebSocket handles WebSocket connection upgrades
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
+
+	// Check origin before proceeding with WebSocket upgrade
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		if !isOriginAllowed(origin, s.allowedOrigins) {
+			log.Printf("Connection rejected: origin not allowed - %s", origin)
+			http.Error(w, "Forbidden: Origin not allowed", http.StatusForbidden)
+			return
+		}
+	}
 
 	hostExists := s.hub.HasHost()
 

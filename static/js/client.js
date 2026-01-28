@@ -272,7 +272,7 @@ function connect() {
             status.style.display = 'none';
         }
 
-        showError('Connection failed. Invalid or expired token. Please scan the QR code again from the host device.');
+        showError('Connection failed. Check the server console for details. This could be due to an invalid token, expired session, or CORS origin restrictions.');
     };
 
     ws.onmessage = function(event) {

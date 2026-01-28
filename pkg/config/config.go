@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -104,14 +105,15 @@ func Load() *Config {
 		}
 	}
 
-	allowedOrigins := parseAllowedOrigins(publicURL)
+	localIP := getLocalIP()
+	allowedOrigins := parseAllowedOrigins(publicURL, localIP)
 
 	config := &Config{
 		Port:             port,
 		PublicURL:        publicURL,
 		SessionTimeout:   time.Duration(timeoutMinutes) * time.Minute,
 		PrivateKeyHex:    privateKeyHex,
-		LocalIP:          getLocalIP(),
+		LocalIP:          localIP,
 		showHelp:         cfg.helpFlag,
 		MaxMessageSize:   int64(maxMessageSize) * 1024, // Convert KB to bytes
 		RateLimitPerSec:  rateLimit,
@@ -183,17 +185,29 @@ func (c *Config) GetQRScheme() string {
 }
 
 // parseAllowedOrigins determines allowed CORS origins from config
-func parseAllowedOrigins(publicURL string) []string {
+func parseAllowedOrigins(publicURL string, localIP string) []string {
+	origins := []string{"http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*", "http://0.0.0.0:*"}
+
 	if publicURL != "" {
-		// If public URL is set, only allow that origin
+		// If public URL is set, add that origin with wildcard for any port
 		parsed, err := url.Parse(publicURL)
-		if err == nil {
-			return []string{parsed.Scheme + "://" + parsed.Host}
+		if err == nil && parsed.Host != "" {
+			// Add wildcard for the public URL's host (allows any port)
+			origin := parsed.Scheme + "://" + parsed.Hostname() + ":*"
+			// Avoid duplicates
+			if !slices.Contains(origins, origin) {
+				origins = append(origins, origin)
+			}
 		}
-		return []string{publicURL}
+	} else if localIP != "" && localIP != "localhost" {
+		// If no public URL is set, add the detected local IP for mobile access
+		origin := "http://" + localIP + ":*"
+		if !slices.Contains(origins, origin) {
+			origins = append(origins, origin)
+		}
 	}
-	// If no public URL, allow localhost variants for development
-	return []string{"http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*", "http://0.0.0.0:*"}
+
+	return origins
 }
 
 // LogStartup logs the server startup information
