@@ -90,7 +90,7 @@ func Load() *Config {
 		var err error
 		maxMessageSize, err = strconv.Atoi(sizeStr)
 		if err != nil || maxMessageSize <= 0 {
-			maxMessageSize = 1024 // 1MB default
+			maxMessageSize = 1 // 1KB default
 		}
 	}
 
@@ -100,7 +100,7 @@ func Load() *Config {
 		var err error
 		rateLimit, err = strconv.Atoi(rateStr)
 		if err != nil || rateLimit <= 0 {
-			rateLimit = 10 // 10 messages per second default
+			rateLimit = 4 // 4 messages per second default
 		}
 	}
 
@@ -131,8 +131,8 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_PUBLIC_URL      Public base URL for QR codes (default: auto-detected local IP)\n")
 	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_SESSION_TIMEOUT  Session timeout in minutes (default: 10)\n")
 	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_PRIVATE_KEY      Private key hex string (auto-generated if not set)\n")
-	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_MAX_MESSAGE_SIZE  Maximum message size in KB (default: 1024)\n")
-	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_RATE_LIMIT       Messages per second per client (default: 10)\n")
+	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_MAX_MESSAGE_SIZE  Maximum message size in KB (default: 1)\n")
+	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_RATE_LIMIT       Messages per second per client (default: 4)\n")
 	fmt.Fprintf(os.Stderr, "\nCLI flags override environment variables.\n")
 }
 

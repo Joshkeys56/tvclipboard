@@ -522,7 +522,6 @@ func TestRateLimit(t *testing.T) {
 	// Send messages faster than rate limit
 	messagesSent := 0
 	for i := 0; i < maxMessagesPerSec*2; i++ {
-
 		// Use the checkRateLimit method to verify it works
 		// Get the client from hub to test rate limiting
 		h.mu.RLock()

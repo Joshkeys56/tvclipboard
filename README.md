@@ -15,6 +15,9 @@ A simple peer-to-peer clipboard sharing application written in Go. Share text be
 - 👥 **Multi-Device**: Phone-to-phone, desktop-to-phone, any combination!
 - ⏱️ **Session Management**: Time-limited QR codes prevent unauthorized access
 - 🔄 **Auto-Refresh**: Host page regenerates QR code every session timeout
+- 🛡️ **Rate Limiting**: Configurable message rate limits prevent abuse (default: 4 msg/sec)
+- 📏 **Message Size Limits**: Configurable maximum message size prevents spam (default: 1KB)
+- 🌐 **CORS Protection**: WebSocket origin validation using public URL config
 
 ## Usage
 
@@ -233,6 +236,20 @@ You can configure session security using environment variables:
 - Example: `TVCLIPBOARD_PUBLIC_URL=https://example.com`
 - Example: `TVCLIPBOARD_PUBLIC_URL=https://example.com:3333`
 
+#### `TVCLIPBOARD_MAX_MESSAGE_SIZE`
+
+- Maximum message size in kilobytes (integer)
+- Default: 1 KB (approximately 1000 characters)
+- Messages exceeding this limit are rejected and logged
+- Example: `TVCLIPBOARD_MAX_MESSAGE_SIZE=1`
+
+#### `TVCLIPBOARD_RATE_LIMIT`
+
+- Maximum number of messages per second per client (integer)
+- Default: 4 messages per second
+- Clients exceeding this limit receive error messages
+- Example: `TVCLIPBOARD_RATE_LIMIT=4`
+
 ### Usage Examples
 
 **Option 1: Environment Variables**
@@ -259,8 +276,11 @@ export TVCLIPBOARD_SESSION_TIMEOUT=15
 # Run with public domain for QR codes
 ./tvclipboard --base-url "https://example.com"
 
+# Set rate limiting and message size
+./tvclipboard --rate-limit 4 --max-message-size 1
+
 # Combine all options
-./tvclipboard --port 8080 --base-url "https://example.com" --expires 15 --key "your-key-here"
+./tvclipboard --port 8080 --base-url "https://example.com" --expires 15 --key "your-key-here" --rate-limit 4 --max-message-size 1
 ```
 
 **Configuration Priority:** CLI flags override environment variables, which override defaults.

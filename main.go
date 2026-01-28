@@ -39,7 +39,7 @@ func main() {
 		cfg.SessionTimeout,
 	)
 
-	srv := server.NewServer(h, tokenManager, qrGen, staticFiles)
+	srv := server.NewServer(h, tokenManager, qrGen, staticFiles, cfg.AllowedOrigins)
 	srv.RegisterRoutes()
 
 	// Log startup information

@@ -14,14 +14,45 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		// SECURITY: In production, you should validate the origin
-		// Allow only your trusted domains to prevent CSRF attacks
-		// For development, allow all origins
-		return true
-	},
+	CheckOrigin:     func(r *http.Request) bool { return true },
 	ReadBufferSize:  1024,
 	WriteBufferSize:  1024,
+}
+
+// isOriginAllowed checks if the given origin is in the allowed origins list
+func isOriginAllowed(origin string, allowedOrigins []string) bool {
+	if len(allowedOrigins) == 0 {
+		return true
+	}
+	for _, allowed := range allowedOrigins {
+		// Check for wildcard at the end
+		if len(allowed) > 0 && allowed[len(allowed)-1] == '*' {
+			prefix := allowed[:len(allowed)-1]
+			if len(origin) >= len(prefix) && origin[:len(prefix)] == prefix {
+				return true
+			}
+		}
+		// Exact match
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// setUpgraderOrigins configures the WebSocket upgrader with allowed origins
+func setUpgraderOrigins(allowedOrigins []string) {
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // Allow requests without Origin header
+		}
+		allowed := isOriginAllowed(origin, allowedOrigins)
+		if !allowed {
+			log.Printf("Origin check failed: %s not in allowed origins %v", origin, allowedOrigins)
+		}
+		return allowed
+	}
 }
 
 // Server handles HTTP requests and WebSocket connections
@@ -30,19 +61,21 @@ type Server struct {
 	tokenManager   *token.TokenManager
 	qrGenerator    *qrcode.Generator
 	staticFiles    fs.FS
+	allowedOrigins []string
 	version        string
 	shutdown       chan struct{}
 }
 
 // NewServer creates a new Server instance
-func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, staticFiles fs.FS) *Server {
+func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, staticFiles fs.FS, allowedOrigins []string) *Server {
 	return &Server{
-		hub:          h,
-		tokenManager: tm,
-		qrGenerator:  qrGen,
-		staticFiles:  staticFiles,
-		version:      time.Now().Format("20060102150405"),
-		shutdown:     make(chan struct{}),
+		hub:            h,
+		tokenManager:    tm,
+		qrGenerator:     qrGen,
+		staticFiles:     staticFiles,
+		allowedOrigins:  allowedOrigins,
+		version:        time.Now().Format("20060102150405"),
+		shutdown:       make(chan struct{}),
 	}
 }
 
@@ -53,6 +86,9 @@ func (s *Server) Shutdown() {
 
 // RegisterRoutes registers all HTTP routes
 func (s *Server) RegisterRoutes() {
+	// Configure WebSocket upgrader with allowed origins
+	setUpgraderOrigins(s.allowedOrigins)
+
 	// Main page handler
 	http.HandleFunc("/", s.handleIndex)
 

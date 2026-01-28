@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -207,11 +208,17 @@ func (c *Client) ReadPump() {
 		// Check message size
 		if int64(len(message)) > c.Hub.maxMessageSize {
 			log.Printf("Message too large from %s: %d bytes (max: %d)", c.ID, len(message), c.Hub.maxMessageSize)
+			errorMsg := Message{Type: "error", Content: fmt.Sprintf("Message too large. Maximum size is %d bytes.", c.Hub.maxMessageSize)}
+			errorBytes, _ := json.Marshal(errorMsg)
+			c.Conn.WriteMessage(websocket.TextMessage, errorBytes)
 			continue
 		}
 
 		// Check rate limit
 		if !c.checkRateLimit(c.Hub) {
+			errorMsg := Message{Type: "error", Content: fmt.Sprintf("Rate limit exceeded. Maximum %d messages per second allowed.", c.Hub.rateLimitPerSec)}
+			errorBytes, _ := json.Marshal(errorMsg)
+			c.Conn.WriteMessage(websocket.TextMessage, errorBytes)
 			continue
 		}
 
