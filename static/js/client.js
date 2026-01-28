@@ -14,7 +14,7 @@
     const content = input.value.trim();
 
     if (!content) {
-        alert('Please enter some text');
+        alert(t('errors.please_enter_text'));
         return;
     }
 
@@ -41,7 +41,7 @@
             input.value = '';
         }
     } else {
-        alert('Not connected. Please wait...');
+        alert(t('errors.not_connected'));
     }
 }
 
@@ -60,11 +60,11 @@ function copyFromClipboard() {
                 document.getElementById('input').value = text;
             })
             .catch(err => {
-                console.error('Failed to read clipboard:', err);
-                alert('Clipboard access blocked.\n\nOn mobile: Long-press in textarea and select "Paste"\n\nOn desktop: Use Ctrl+V / Cmd+V');
+                console.error(t('errors.failed_to_copy'), err);
+                alert(t('errors.clipboard_access_blocked'));
             });
     } else {
-        alert('Clipboard access not supported.\nOn mobile: Long-press in textarea and select "Paste"');
+        alert(t('errors.clipboard_not_supported'));
         document.getElementById('input').focus();
     }
 }
@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const token = urlParams.get('token');
 
     if (!token || token.trim() === '') {
-        showError('No session token found. Please scan the QR code from the host device to get a valid session link.');
+        showError(t('errors.no_token'));
         disableAll();
         return false;
     }
@@ -116,7 +116,7 @@ function disableAll() {
 
     if (textarea) {
         textarea.disabled = true;
-        textarea.placeholder = 'Connection disabled - Please get a new QR code';
+        textarea.placeholder = t('client.connection_disabled');
     }
 
     buttons.forEach(btn => {
@@ -130,7 +130,7 @@ function enableAll() {
 
     if (textarea) {
         textarea.disabled = false;
-        textarea.placeholder = 'Type or paste text here, then click Send...';
+        textarea.placeholder = t('client.input_placeholder');
     }
 
     buttons.forEach(btn => {
@@ -174,7 +174,7 @@ function expireSession() {
 
     const timerEl = document.getElementById('timer');
     if (timerEl) {
-        timerEl.innerHTML = '⏱️ <span style="color: #ff6b6b;">Session expired</span>';
+        timerEl.innerHTML = '⏱️ <span style="color: #ff6b6b;">' + t('client.session_expired') + '</span>';
         timerEl.style.color = '#ff6b6b';
     }
 
@@ -182,10 +182,10 @@ function expireSession() {
 
     const sendBtn = document.getElementById('sendBtn');
     if (sendBtn) {
-        sendBtn.textContent = 'Expired';
+        sendBtn.textContent = t('client.expired_button');
     }
 
-    showError('Session expired. Please scan the new QR code from the host device.');
+    showError(t('errors.session_expired_alert'));
 
     if (ws) {
         ws.close();
@@ -218,7 +218,7 @@ function connect() {
         const errorEl = document.getElementById('error');
 
         if (status) {
-            status.textContent = '📱 Client Mode - Connected';
+            status.textContent = '📱 ' + t('client.status_client_connected');
             status.className = 'status connected';
             status.style.display = 'block';
         }
@@ -247,13 +247,13 @@ function connect() {
         const status = document.getElementById('status');
         if (status) {
             if (event.code === 1000) {
-                status.textContent = '🔌 Disconnected';
+                status.textContent = '🔌 ' + t('common.status_disconnected');
             } else if (event.code === 1006) {
-                status.textContent = '🔌 Connection lost';
+                status.textContent = '🔌 ' + t('client.status_connection_lost');
             } else if (event.code >= 4000) {
-                status.textContent = '❌ Connection failed (' + event.code + ')';
+                status.textContent = '❌ ' + t('client.status_connection_failed') + ' (' + event.code + ')';
             } else {
-                status.textContent = '🔌 Disconnected (' + event.code + ')';
+                status.textContent = '🔌 ' + t('client.status_disconnected_code', {code: event.code});
             }
             status.className = 'status disconnected';
         }
@@ -276,7 +276,7 @@ function connect() {
             status.style.display = 'none';
         }
 
-        showError('Connection failed. Check the server console for details. This could be due to an invalid token, expired session, or CORS origin restrictions.');
+        showError(t('errors.connection_failed_detailed'));
     };
 
     ws.onmessage = function(event) {
@@ -293,7 +293,7 @@ function connect() {
         if (role !== 'client') {
             console.warn('Expected client role but got:', role);
             disableAll();
-            showError('Invalid role assignment. Please scan the QR code from the host device.');
+            showError(t('errors.invalid_role'));
         }
     }
 
@@ -301,7 +301,7 @@ function connect() {
     // Note: sendText gets session checking wrapper to preserve original behavior
     window.sendText = function() {
         if (sessionExpired) {
-            alert('Session has expired. Please scan the new QR code.');
+            alert(t('errors.session_expired_alert'));
             return;
         }
         return sendText();

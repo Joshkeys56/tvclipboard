@@ -3,39 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TV Clipboard - Host</title>
+    <title data-i18n="host.title">TV Clipboard - Host</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
     <div class="container">
-        <h1>📋 TV Clipboard (Host)</h1>
-        <p class="subtitle">Share text between your devices</p>
-        <p class="mode-switch">You are host</p>
+        <h1 data-i18n="common.title">📋 TV Clipboard (Host)</h1>
+        <p class="subtitle" data-i18n="common.subtitle_host">Share text between your devices</p>
+        <p class="mode-switch" data-i18n="host.mode">You are host</p>
 
         <div id="timer" class="timer">
-            ⏱️ New QR code in <span id="time-remaining">10:00</span>
+            <span data-i18n="host.timer_label" data-i18n-before="⏱️ ">New QR code in</span> <span id="time-remaining">10:00</span>
         </div>
 
         <div id="status" class="status disconnected">
-            🔌 Disconnected
+            <span data-i18n="common.status_disconnected" data-i18n-before="🔌 ">Disconnected</span>
         </div>
 
         <div id="error-message" class="error-message" style="display: none;"></div>
 
         <div class="qr-section">
-            <h2>📱 Scan with your phone</h2>
+            <h2 data-i18n="host.scan_instruction" data-i18n-before="📱 ">Scan with your phone</h2>
             <div id="qrcode"></div>
             <div class="url-text" id="url-text"></div>
         </div>
 
         <div id="received-section" class="received-section">
-            <h2>📥 Received</h2>
+            <h2 data-i18n="host.received_section" data-i18n-before="📥 ">Received</h2>
             <div id="received-content" class="received-content"></div>
             <div class="timestamp" id="timestamp"></div>
-            <button type="button" id="reveal-btn" class="reveal-btn" onclick="window.toggleReveal()">👁️ Show Content</button>
+            <button type="button" id="reveal-btn" class="reveal-btn" onclick="window.toggleReveal()" data-i18n="host.reveal_button" data-i18n-before="👁️ ">Show Content</button>
             <div class="button-group">
-                <button type="button" class="copy-btn" onclick="window.copyReceived()">Copy to Clipboard</button>
+                <button type="button" class="copy-btn" onclick="window.copyReceived()" data-i18n="host.copy_button">Copy to Clipboard</button>
             </div>
         </div>
 
@@ -47,6 +47,7 @@
     </div>
 
     <script src="/static/js/common.js"></script>
+    <script src="/static/js/i18n.js"></script>
     <script src="/static/js/host.js"></script>
 </body>
 </html>

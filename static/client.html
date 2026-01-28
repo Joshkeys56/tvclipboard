@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TV Clipboard - Client</title>
+    <title data-i18n="client.title">TV Clipboard - Client</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
     <div class="container">
-        <h1>📱 Send to Host</h1>
-        <p class="subtitle">Paste text here and send</p>
-        <p class="mode-switch">Connected to host</p>
+        <h1 data-i18n="common.title">📱 Send to Host</h1>
+        <p class="subtitle" data-i18n="common.subtitle_client">Paste text here and send</p>
+        <p class="mode-switch" data-i18n="client.mode">Connected to host</p>
 
         <div id="timer" class="timer" style="display: none;">
-            ⏱️ Session expires in <span id="time-remaining">10:00</span>
+            <span data-i18n="client.timer_label" data-i18n-before="⏱️ ">Session expires in</span> <span id="time-remaining">10:00</span>
         </div>
 
         <div id="status" class="status disconnected">
-            🔌 Disconnected
+            <span data-i18n="common.status_disconnected" data-i18n-before="🔌 ">Disconnected</span>
         </div>
 
         <div id="error" class="status disconnected" style="display: none;">
@@ -26,13 +26,13 @@
         </div>
 
         <div class="input-section">
-            <h2>✍️ Enter or paste text</h2>
-            <textarea id="input" placeholder="Type or paste text here, then click Send..." disabled></textarea>
+            <h2 data-i18n="client.enter_instruction" data-i18n-before="✍️ ">Enter or paste text</h2>
+            <textarea id="input" data-i18n-placeholder="client.input_placeholder" placeholder="Type or paste text here, then click Send..." disabled></textarea>
             <div class="button-group">
-                <button class="send-btn" id="sendBtn" onclick="sendText()" disabled>Send</button>
-                <button class="copy-btn" onclick="copyFromClipboard()" disabled>Paste</button>
-                <button class="clear-btn" onclick="clearInput()" disabled>Clear</button>
-                <button class="close-btn" onclick="closeTab()">✕ Close</button>
+                <button class="send-btn" id="sendBtn" onclick="sendText()" disabled data-i18n="client.send_button">Send</button>
+                <button class="copy-btn" onclick="copyFromClipboard()" disabled data-i18n="client.paste_button">Paste</button>
+                <button class="clear-btn" onclick="clearInput()" disabled data-i18n="client.clear_button">Clear</button>
+                <button class="close-btn" onclick="closeTab()" data-i18n="client.close_button" data-i18n-before="✕ ">Close</button>
             </div>
         </div>
 
@@ -44,6 +44,7 @@
     </div>
 
     <script src="/static/js/common.js"></script>
+    <script src="/static/js/i18n.js"></script>
     <script src="/static/js/client.js"></script>
 </body>
 </html>

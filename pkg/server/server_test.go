@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"tvclipboard/i18n"
 	"tvclipboard/pkg/hub"
 	"tvclipboard/pkg/qrcode"
 	"tvclipboard/pkg/token"
@@ -48,6 +49,12 @@ func (testFS) ReadFile(name string) ([]byte, error) {
 
 var mockStaticFiles testFS
 
+var mockI18n = i18n.GetInstance()
+
+func init() {
+	mockI18n.SetLanguage("en")
+}
+
 // TestClientURLMissingToken tests that client page responds correctly to missing token
 func TestClientURLMissingToken(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
@@ -56,7 +63,7 @@ func TestClientURLMissingToken(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9) // 10 minutes
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +92,7 @@ func TestWebSocketConnectionWithoutToken(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Simulate host exists by setting hostID
 	h.SetHostID("test-host")
@@ -116,7 +123,7 @@ func TestWebSocketConnectionWithInvalidToken(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Simulate host exists
 	h.SetHostID("test-host")
@@ -147,7 +154,7 @@ func TestWebSocketConnectionWithExpiredToken(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Simulate host exists
 	h.SetHostID("test-host")
@@ -190,7 +197,7 @@ func TestWebSocketConnectionHostWithoutToken(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		srv.handleWebSocket(w, r)
@@ -222,7 +229,7 @@ func TestWebSocketConnectionHostWithToken(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		srv.handleWebSocket(w, r)
@@ -256,7 +263,7 @@ func TestQRCodeEndpoint(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		srv.handleQRCode(w, r)
@@ -290,7 +297,7 @@ func TestCacheBustingVersion(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -327,7 +334,7 @@ func TestVersionPattern(t *testing.T) {
 
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Version should be 14 digits (YYYYMMDDHHMMSS)
 	if len(srv.version) != 14 {
@@ -506,7 +513,7 @@ func TestNewServer(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Verify all fields are set
 	if srv.hub != h {
@@ -527,6 +534,9 @@ func TestNewServer(t *testing.T) {
 	if srv.version == "" {
 		t.Error("Version should be set")
 	}
+	if srv.i18n == nil {
+		t.Error("i18n should be set")
+	}
 }
 
 // TestShutdown tests that Shutdown is a no-op (should not panic)
@@ -537,7 +547,7 @@ func TestShutdown(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Should not panic
 	srv.Shutdown()
@@ -552,7 +562,7 @@ func TestRegisterRoutes(t *testing.T) {
 	tm := token.NewTokenManager("", 10)
 	qrGen := qrcode.NewGenerator("localhost:3333", "http", 10*60*1e9)
 
-	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"})
+	srv := NewServer(h, tm, qrGen, mockStaticFiles, []string{"http://localhost:*"}, mockI18n)
 
 	// Register routes
 	srv.RegisterRoutes()

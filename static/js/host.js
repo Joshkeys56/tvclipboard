@@ -39,20 +39,20 @@
     section.classList.add('show');
 
     // Show reveal button
-    revealBtn.textContent = '👁️ Show Content';
+    revealBtn.textContent = '👁️ ' + t('host.reveal_button');
     revealBtn.style.display = 'inline-block';
 
     const now = new Date();
-    timestamp.textContent = `Received at ${now.toLocaleTimeString()}`;
+    timestamp.textContent = t('host.received_at') + ' ' + now.toLocaleTimeString();
 
     // Try to copy to clipboard automatically
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(decrypted)
             .then(() => {
-                console.log('Auto-copied to clipboard');
+                console.log(t('host.auto_copied'));
             })
             .catch(err => {
-                console.error('Auto-copy failed:', err);
+                console.error(t('host.auto_copy_failed'), err);
             });
     }
 }
@@ -61,7 +61,7 @@ function copyReceived() {
     console.log('copyReceived called, content length:', receivedFullContent.length);
 
     if (!receivedFullContent) {
-        alert('No content to copy. Please receive a message first.');
+        alert(t('host.no_content_to_copy'));
         return;
     }
 
@@ -69,15 +69,15 @@ function copyReceived() {
         navigator.clipboard.writeText(receivedFullContent)
             .then(() => {
                 console.log('Successfully copied to clipboard');
-                alert('Copied to clipboard!');
+                alert(t('errors.copied_to_clipboard'));
             })
             .catch(err => {
-                console.error('Failed to copy:', err);
-                alert('Failed to copy to clipboard: ' + err.message);
+                console.error(t('errors.failed_to_copy'), err);
+                alert(t('errors.failed_to_copy') + ': ' + err.message);
             });
     } else {
         console.error('Clipboard API not supported');
-        alert('Clipboard not supported in this browser');
+        alert(t('host.clipboard_not_supported_browser'));
     }
 }
 
@@ -100,14 +100,14 @@ function toggleReveal() {
         contentDiv.textContent = obfuscated;
         contentDiv.classList.add('obfuscated');
         contentDiv.onclick = toggleReveal;
-        revealBtn.textContent = '👁️ Show Content';
+        revealBtn.textContent = '👁️ ' + t('host.reveal_button');
         isRevealed = false;
     } else {
         // Show full content
         contentDiv.textContent = receivedFullContent;
         contentDiv.classList.remove('obfuscated');
         contentDiv.onclick = null;
-        revealBtn.textContent = '🙈 Hide Content';
+        revealBtn.textContent = '🙈 ' + t('common.hide_content');
         isRevealed = true;
     }
 }
@@ -127,7 +127,7 @@ function generateQRCode() {
     container.innerHTML = '';
     container.appendChild(img);
 
-    urlText.textContent = url + ' (Links to client mode)';
+    urlText.textContent = url + ' (' + t('host.links_to_client') + ')';
 }
 
     function startTimer() {
@@ -159,7 +159,7 @@ function generateQRCode() {
 function refreshPage() {
     const timerEl = document.getElementById('timer');
     if (timerEl) {
-        timerEl.innerHTML = '⏱️ <span style="color: #4CAF50;">Refreshing QR code...</span>';
+        timerEl.innerHTML = '⏱️ <span style="color: #4CAF50;">' + t('host.refreshing_qr') + '</span>';
     }
     setTimeout(function() {
         location.reload();
@@ -180,7 +180,7 @@ function connect() {
 
     ws.onopen = function() {
         const status = document.getElementById('status');
-        status.textContent = '🖥️ Host Mode - Connected';
+        status.textContent = '🖥️ ' + t('host.status_host_connected');
         status.className = 'status connected';
 
         const errorEl = document.getElementById('error-message');
@@ -215,9 +215,9 @@ function connect() {
         const statusEl = document.getElementById('status');
 
         if (ws.readyState === WebSocket.CLOSED) {
-            errorEl.textContent = 'A host is already connected from another device. Close the other host.html tab to connect as host here, or scan the QR code from this device to connect as a client.';
+            errorEl.textContent = t('host.host_already_connected');
             errorEl.style.display = 'block';
-            statusEl.textContent = '❌ Connection Rejected';
+            statusEl.textContent = '❌ ' + t('host.connection_rejected');
         }
     };
 

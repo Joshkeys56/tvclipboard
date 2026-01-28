@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"tvclipboard/i18n"
 	"tvclipboard/pkg/config"
 	"tvclipboard/pkg/hub"
 	"tvclipboard/pkg/qrcode"
@@ -27,6 +28,15 @@ var staticFiles embed.FS
 func main() {
 	// Load configuration
 	cfg := config.Load()
+
+	// Initialize i18n
+	i18nInstance := i18n.GetInstance()
+	if err := i18nInstance.SetLanguage(cfg.Language); err != nil {
+		log.Printf("Failed to set language %s, falling back to en: %v", cfg.Language, err)
+	}
+	if err := i18nInstance.LoadAllLanguages(); err != nil {
+		log.Printf("Warning: failed to load translation files: %v", err)
+	}
 
 	// Initialize components
 	h := hub.NewHub(cfg.MaxMessageSize, cfg.RateLimitPerSec)
@@ -52,7 +62,7 @@ func main() {
 		cfg.SessionTimeout,
 	)
 
-	srv := server.NewServer(h, tokenManager, qrGen, staticFiles, cfg.AllowedOrigins)
+	srv := server.NewServer(h, tokenManager, qrGen, staticFiles, cfg.AllowedOrigins, i18nInstance)
 	srv.RegisterRoutes()
 
 	// Log startup information

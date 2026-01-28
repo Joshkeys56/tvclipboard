@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"tvclipboard/i18n"
 	"tvclipboard/pkg/hub"
 	"tvclipboard/pkg/qrcode"
 	"tvclipboard/pkg/token"
@@ -100,10 +102,11 @@ type Server struct {
 	staticFiles    fs.FS
 	allowedOrigins []string
 	version        string
+	i18n           *i18n.I18n
 }
 
 // NewServer creates a new Server instance
-func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, staticFiles fs.FS, allowedOrigins []string) *Server {
+func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, staticFiles fs.FS, allowedOrigins []string, i18n *i18n.I18n) *Server {
 	return &Server{
 		hub:            h,
 		tokenManager:   tm,
@@ -111,6 +114,7 @@ func NewServer(h *hub.Hub, tm *token.TokenManager, qrGen *qrcode.Generator, stat
 		staticFiles:    staticFiles,
 		allowedOrigins: allowedOrigins,
 		version:        time.Now().Format("20060102150405"),
+		i18n:           i18n,
 	}
 }
 
@@ -132,6 +136,9 @@ func (s *Server) RegisterRoutes() {
 
 	// WebSocket endpoint
 	http.HandleFunc("/ws", s.handleWebSocket)
+
+	// i18n endpoint
+	http.HandleFunc("/i18n.json", s.handleI18n)
 
 	// Serve static files (CSS, JS)
 	staticContent, err := fs.Sub(s.staticFiles, "static")
@@ -171,9 +178,32 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	jsRegex := regexp.MustCompile(`(<script src="/static/js/[^"]+\.js)">`)
 	htmlContent = jsRegex.ReplaceAllString(htmlContent, `$1?v=`+s.version+`">`)
 
+	// Add i18n script before body closing tag
+	i18nJSON, err := s.i18n.ToJSON()
+	if err != nil {
+		log.Printf("Failed to serialize i18n translations: %v", err)
+		i18nJSON = []byte("{}")
+	}
+
+	htmlContent = strings.Replace(htmlContent, "</body>", `<script>window.translations = `+string(i18nJSON)+`;</script></body>`, 1)
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if _, err := w.Write([]byte(htmlContent)); err != nil {
 		log.Printf("Failed to write response: %v", err)
+	}
+}
+
+// handleI18n serves i18n translations as JSON
+func (s *Server) handleI18n(w http.ResponseWriter, r *http.Request) {
+	translations, err := s.i18n.GetTranslations()
+	if err != nil {
+		http.Error(w, "Failed to get translations", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(translations); err != nil {
+		log.Printf("Failed to encode i18n response: %v", err)
 	}
 }
 

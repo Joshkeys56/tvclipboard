@@ -6,13 +6,13 @@ let cryptoAvailable = window.crypto && window.crypto.subtle;
 
 console.log('Web Crypto API available:', cryptoAvailable);
 if (!cryptoAvailable) {
-    console.warn('Note: Web Crypto API is not available. This happens when accessing via HTTP (not HTTPS) and not on localhost. Messages will be sent unencrypted.');
+    console.warn(t('errors.crypto_not_available'));
 }
 
 // Simple encryption using Web Crypto API
 async function getKey() {
     if (!cryptoAvailable) {
-        console.warn('Web Crypto API not available (needs HTTPS or localhost). Messages will be unencrypted.');
+        console.warn(t('errors.crypto_not_available_console'));
         return null;
     }
 
@@ -44,7 +44,7 @@ async function getKey() {
 
 async function encryptMessage(text) {
     if (!cryptoAvailable) {
-        console.warn('Web Crypto API not available. Sending unencrypted message.');
+        console.warn(t('errors.crypto_not_available_send'));
         return text; // Return plain text if crypto not available
     }
 
@@ -70,7 +70,7 @@ async function encryptMessage(text) {
 
 async function decryptMessage(base64) {
     if (!cryptoAvailable) {
-        console.warn('Web Crypto API not available. Received unencrypted message.');
+        console.warn(t('errors.crypto_not_available_receive'));
         return base64; // Return as-is if crypto not available
     }
 
@@ -90,7 +90,7 @@ async function decryptMessage(base64) {
 
         return new TextDecoder().decode(decrypted);
     } catch (error) {
-        console.error('Decryption failed:', error);
+        console.error(t('errors.decryption_failed'), error);
         throw error;
     }
 }

@@ -22,6 +22,7 @@ type cliFlags struct {
 	helpFlag           bool
 	maxMessageSizeFlag int
 	rateLimitFlag      int
+	langFlag           string
 }
 
 var cfg = cliFlags{}
@@ -37,6 +38,7 @@ type Config struct {
 	MaxMessageSize  int64
 	RateLimitPerSec int
 	AllowedOrigins  []string
+	Language        string
 }
 
 // Load loads configuration from environment variables and CLI flags
@@ -49,6 +51,7 @@ func Load() *Config {
 	flag.BoolVar(&cfg.helpFlag, "help", false, "Show this help message")
 	flag.IntVar(&cfg.maxMessageSizeFlag, "max-message-size", 0, "Maximum message size in KB (default: 1024, env: TVCLIPBOARD_MAX_MESSAGE_SIZE)")
 	flag.IntVar(&cfg.rateLimitFlag, "rate-limit", 0, "Messages per second per client (default: 10, env: TVCLIPBOARD_RATE_LIMIT)")
+	flag.StringVar(&cfg.langFlag, "lang", "", "Language code (default: en, env: TVCLIPBOARD_LANGUAGE)")
 	flag.Parse()
 
 	if cfg.helpFlag {
@@ -108,6 +111,15 @@ func Load() *Config {
 	localIP := getLocalIP()
 	allowedOrigins := parseAllowedOrigins(publicURL, localIP)
 
+	// Set language (default to en if not specified)
+	lang := cfg.langFlag
+	if lang == "" {
+		lang = os.Getenv("TVCLIPBOARD_LANGUAGE")
+		if lang == "" {
+			lang = "en"
+		}
+	}
+
 	config := &Config{
 		Port:            port,
 		PublicURL:       publicURL,
@@ -118,6 +130,7 @@ func Load() *Config {
 		MaxMessageSize:  int64(maxMessageSize) * 1024, // Convert KB to bytes
 		RateLimitPerSec: rateLimit,
 		AllowedOrigins:  allowedOrigins,
+		Language:        lang,
 	}
 
 	return config
@@ -135,6 +148,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_PRIVATE_KEY      Private key hex string (auto-generated if not set)\n")
 	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_MAX_MESSAGE_SIZE  Maximum message size in KB (default: 1)\n")
 	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_RATE_LIMIT       Messages per second per client (default: 4)\n")
+	fmt.Fprintf(os.Stderr, "  TVCLIPBOARD_LANGUAGE          Language code (default: en)\n")
 	fmt.Fprintf(os.Stderr, "\nCLI flags override environment variables.\n")
 }
 
