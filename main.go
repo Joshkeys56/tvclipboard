@@ -1,3 +1,7 @@
+// TV Clipboard - Peer-to-peer clipboard sharing
+// Copyright (C) 2024 Fabio Akita
+// Licensed under GNU Affero General Public License v3.0
+
 package main
 
 import (

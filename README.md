@@ -1,5 +1,7 @@
 # TV Clipboard
 
+![Host Screen Example](static/img/tvclipboard.jpg)
+
 A simple peer-to-peer clipboard sharing application written in Go. Share text between your desktop and mobile devices easily using a web interface and QR codes.
 
 ## Features
@@ -308,3 +310,36 @@ Session tokens are encrypted using AES-GCM with your private key:
 - Session timeout limits how long a QR code remains valid
 - Private key rotation requires server restart (new QR code generation)
 - For local network use, default settings provide reasonable security
+
+## License
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+### What AGPL Means
+
+This is a copyleft license that:
+
+- ✅ Allows you to freely use, modify, and distribute the software
+- ✅ Requires you to share your modifications under the same license
+- ✅ Requires network deployments to provide source code to users
+- ❌ Does NOT allow you to close the source or make it proprietary
+
+If you modify this program and run it as a network service, your users must have access to the source code of your modified version.
+
+### Quick Summary
+
+- **Commercial use**: Allowed
+- **Modifying**: Allowed (must share modifications)
+- **Distributing**: Allowed (must use same license)
+- **Sublicensing**: Not allowed
+- **Liability**: Disclaimed (use at your own risk)
+
+For full license text, see [LICENSE](LICENSE) file.
+
+## Copyright
+
+Copyright (C) 2026 Fabio Akita
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation.
