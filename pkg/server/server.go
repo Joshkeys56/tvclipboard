@@ -178,6 +178,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	jsRegex := regexp.MustCompile(`(<script src="/static/js/[^"]+\.js)">`)
 	htmlContent = jsRegex.ReplaceAllString(htmlContent, `$1?v=`+s.version+`">`)
 
+	// Add version to all static CSS files
+	cssRegex := regexp.MustCompile(`(<link[^>]+href="/static/css/[^"]+\.css"[^>]*>)`)
+	htmlContent = cssRegex.ReplaceAllStringFunc(htmlContent, func(match string) string {
+		return strings.Replace(match, ".css", `.css?v=`+s.version, 1)
+	})
+
 	// Add i18n script before body closing tag
 	i18nJSON, err := s.i18n.ToJSON()
 	if err != nil {

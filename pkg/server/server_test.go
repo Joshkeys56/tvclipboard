@@ -30,6 +30,7 @@ func (testFS) ReadFile(name string) ([]byte, error) {
 		return []byte(`<!DOCTYPE html>
 <html>
 <body>
+<link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/common.js"></script>
 <script src="/static/js/host.js"></script>
 </body>
@@ -39,6 +40,7 @@ func (testFS) ReadFile(name string) ([]byte, error) {
 		return []byte(`<!DOCTYPE html>
 <html>
 <body class="container">
+<link rel="stylesheet" href="/static/css/style.css">
 <script src="/static/js/common.js"></script>
 <script src="/static/js/client.js"></script>
 </body>
@@ -323,6 +325,34 @@ func TestCacheBustingVersion(t *testing.T) {
 	}
 	if !strings.Contains(string(body), `<script src="/static/js/host.js?v=`+srv.version+`">`) {
 		t.Errorf("Expected host.js to have version parameter, got: %s", string(body))
+	}
+
+	// Check that version is added to CSS link
+	if !strings.Contains(string(body), `href="/static/css/style.css?v=`+srv.version) {
+		t.Errorf("Expected style.css to have version parameter, got: %s", string(body))
+	}
+
+	// Test client page
+	resp2, err := http.Get(server.URL + "/?mode=client")
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	body2, err := io.ReadAll(resp2.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+
+	// Check client page also has cache busting
+	if !strings.Contains(string(body2), `<script src="/static/js/common.js?v=`+srv.version+`">`) {
+		t.Errorf("Expected common.js to have version parameter in client page, got: %s", string(body2))
+	}
+	if !strings.Contains(string(body2), `<script src="/static/js/client.js?v=`+srv.version+`">`) {
+		t.Errorf("Expected client.js to have version parameter, got: %s", string(body2))
+	}
+	if !strings.Contains(string(body2), `href="/static/css/style.css?v=`+srv.version) {
+		t.Errorf("Expected style.css to have version parameter in client page, got: %s", string(body2))
 	}
 }
 
