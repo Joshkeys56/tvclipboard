@@ -78,7 +78,7 @@ func (tm *TokenManager) GenerateToken() (string, error) {
 	var err error
 	maxAttempts := 100
 
-	for i := 0; i < maxAttempts; i++ {
+	for i := range maxAttempts {
 		tokenID, err = generateRandomID()
 		if err != nil {
 			return "", err

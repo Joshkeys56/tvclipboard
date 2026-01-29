@@ -89,9 +89,9 @@ func (i *I18n) Translate(key string, args ...any) string {
 
 	// Parse key format: "section.key" or just "key"
 	var section, k string
-	if dot := strings.Index(key, "."); dot >= 0 {
-		section = key[:dot]
-		k = key[dot+1:]
+	if before, after, found := strings.Cut(key, "."); found {
+		section = before
+		k = after
 	} else {
 		k = key
 	}

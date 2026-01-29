@@ -67,9 +67,8 @@ func InjectSessionTimeout(html string, timeoutSec int) string {
 
 // htmlReplace replaces the first occurrence of old with new in html
 func htmlReplace(html, old, new string) string {
-	// Use standard library's optimized string search
-	if idx := strings.Index(html, old); idx != -1 {
-		return html[:idx] + new + html[idx+len(old):]
+	if before, after, found := strings.Cut(html, old); found {
+		return before + new + after
 	}
 	return html
 }
