@@ -102,7 +102,7 @@ func (tm *TokenManager) GenerateToken() (string, error) {
 	for len(tm.tokens) > tm.maxTokens {
 		oldestID := tm.tokenOrder[0]
 		delete(tm.tokens, oldestID)
-		// Remove from order list (shift slice)
+		// Remove from order list (optimized slice logic)
 		tm.tokenOrder = tm.tokenOrder[1:]
 		log.Printf("Rotated out oldest token due to max limit: %s", oldestID)
 	}
@@ -164,22 +164,32 @@ func (tm *TokenManager) cleanupExpired() {
 
 	now := time.Now()
 	expiredCount := 0
-
-	for i := len(tm.tokenOrder) - 1; i >= 0; i-- {
-		id := tm.tokenOrder[i]
+	activeCount := 0
+	
+	// Create a new slice for keeping tokens (O(N) filtering)
+	// We reuse the existing backing array if possible, but for simplicity and safety
+	// against memory leaks in large arrays, we'll compact it in place
+	
+	// Iterate and compact in-place
+	for _, id := range tm.tokenOrder {
 		timestamp, exists := tm.tokens[id]
-		if !exists {
-			// Remove from order list if not in map
-			tm.tokenOrder = append(tm.tokenOrder[:i], tm.tokenOrder[i+1:]...)
+		
+		// If token doesn't exist in map (should not happen) or is expired
+		if !exists || now.Sub(time.Unix(timestamp, 0)) > tm.timeout {
+			if exists {
+				delete(tm.tokens, id)
+				expiredCount++
+			}
 			continue
 		}
-
-		if now.Sub(time.Unix(timestamp, 0)) > tm.timeout {
-			delete(tm.tokens, id)
-			tm.tokenOrder = append(tm.tokenOrder[:i], tm.tokenOrder[i+1:]...)
-			expiredCount++
-		}
+		
+		// Keep this token
+		tm.tokenOrder[activeCount] = id
+		activeCount++
 	}
+	
+	// Truncate the slice to the new length
+	tm.tokenOrder = tm.tokenOrder[:activeCount]
 
 	if expiredCount > 0 {
 		log.Printf("Cleaned up %d expired tokens", expiredCount)

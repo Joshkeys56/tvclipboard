@@ -298,7 +298,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	mobile := r.URL.Query().Get("mobile") == "true"
 	client := hub.NewClient(conn, s.hub, mobile)
 
-	s.hub.Register <- client
+	select {
+	case s.hub.Register <- client:
+	case <-s.hub.Done():
+		log.Printf("Hub stopped, rejecting connection")
+		conn.Close()
+		return
+	}
 
 	go client.WritePump()
 	go client.ReadPump()

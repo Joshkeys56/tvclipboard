@@ -65,6 +65,11 @@ func NewHub(maxMessageSize int64, rateLimitPerSec int) *Hub {
 	}
 }
 
+// Done returns a channel that closes when the hub stops
+func (h *Hub) Done() <-chan struct{} {
+	return h.stop
+}
+
 // Run starts the hub's main loop
 func (h *Hub) Run() {
 	for {
@@ -95,8 +100,11 @@ func (h *Hub) Run() {
 			}
 			select {
 			case client.Send <- msgBytes:
-			default:
-				log.Printf("Client %s send channel full, skipping role assignment", client.ID)
+			case <-time.After(500 * time.Millisecond):
+				log.Printf("Client %s send channel full/blocked, failed role assignment. Closing.", client.ID)
+				client.Conn.Close()
+				delete(h.clients, client.ID)
+				continue
 			}
 
 			h.mu.Unlock()
@@ -128,8 +136,8 @@ func (h *Hub) Run() {
 						select {
 						case c.Send <- msgBytes:
 							log.Printf("Client %s promoted to HOST", id)
-						default:
-							log.Printf("Client %s send channel full, skipping host promotion", id)
+						case <-time.After(500 * time.Millisecond):
+							log.Printf("Client %s send channel full, failed host promotion", id)
 						}
 						break
 					}
@@ -209,7 +217,10 @@ func (c *Client) checkRateLimit(hub *Hub) bool {
 // ReadPump reads messages from the WebSocket connection
 func (c *Client) ReadPump() {
 	defer func() {
-		c.Hub.Unregister <- c
+		select {
+		case c.Hub.Unregister <- c:
+		case <-c.Hub.stop:
+		}
 		c.Conn.Close()
 	}()
 
