@@ -181,11 +181,15 @@ function connect() {
 
     ws.onopen = function() {
         const status = document.getElementById('status');
-        status.textContent = '🖥️ ' + t('host.status_host_connected');
-        status.className = 'status connected';
+        if (status) {
+            status.textContent = '🖥️ ' + t('host.status_host_connected');
+            status.className = 'status connected';
+        }
 
         const errorEl = document.getElementById('error-message');
-        errorEl.style.display = 'none';
+        if (errorEl) {
+            errorEl.style.display = 'none';
+        }
 
         console.log('WebSocket connected');
 
@@ -200,8 +204,10 @@ function connect() {
         }
 
         const status = document.getElementById('status');
-        status.textContent = '🔌 Disconnected';
-        status.className = 'status disconnected';
+        if (status) {
+            status.textContent = '🔌 Disconnected';
+            status.className = 'status disconnected';
+        }
         console.log('WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
 
         setTimeout(connect, 3000);
@@ -216,14 +222,24 @@ function connect() {
         const statusEl = document.getElementById('status');
 
         if (ws.readyState === WebSocket.CLOSED) {
-            errorEl.textContent = t('host.host_already_connected');
-            errorEl.style.display = 'block';
-            statusEl.textContent = '❌ ' + t('host.connection_rejected');
+            if (errorEl) {
+                errorEl.textContent = t('host.host_already_connected');
+                errorEl.style.display = 'block';
+            }
+            if (statusEl) {
+                statusEl.textContent = '❌ ' + t('host.connection_rejected');
+            }
         }
     };
 
     ws.onmessage = function(event) {
-        const message = JSON.parse(event.data);
+        let message;
+        try {
+            message = JSON.parse(event.data);
+        } catch (error) {
+            console.error('Failed to parse WebSocket message:', error);
+            return;
+        }
         console.log('Received message:', message);
 
         if (message.type === 'role') {

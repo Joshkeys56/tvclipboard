@@ -16,6 +16,12 @@ import (
 	"tvclipboard/pkg/token"
 )
 
+// Pre-compiled regexes for cache busting (compiled once at package init)
+var (
+	jsRegex  = regexp.MustCompile(`(<script src="/static/js/[^"]+\.js)">`)
+	cssRegex = regexp.MustCompile(`(<link[^>]+href="/static/css/[^"]+\.css"[^>]*>)`)
+)
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 	ReadBufferSize:  1024,
@@ -83,12 +89,18 @@ func matchesWildcard(origin, pattern string) bool {
 func setUpgraderOrigins(allowedOrigins []string) {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
+		// If allowedOrigins is configured, require a valid Origin header
+		// Empty origin is only allowed when no origins are explicitly configured
 		if origin == "" {
-			return true // Allow requests without Origin header
+			if len(allowedOrigins) > 0 {
+				log.Printf("Origin check failed: empty origin header with configured allowed origins")
+				return false
+			}
+			return true // Allow requests without Origin header only when no restrictions configured
 		}
 		allowed := isOriginAllowed(origin, allowedOrigins)
 		if !allowed {
-			log.Printf("Origin check failed: %s not in allowed origins %v", origin, allowedOrigins)
+			log.Printf("Origin check failed: %s not in allowed origins", origin)
 		}
 		return allowed
 	}
@@ -174,23 +186,23 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		htmlContent = qrcode.InjectSessionTimeout(htmlContent, s.qrGenerator.SessionTimeoutSeconds())
 	}
 
-	// Add version to all static JS files
-	jsRegex := regexp.MustCompile(`(<script src="/static/js/[^"]+\.js)">`)
+	// Add version to all static JS files (using pre-compiled regex)
 	htmlContent = jsRegex.ReplaceAllString(htmlContent, `$1?v=`+s.version+`">`)
 
-	// Add version to all static CSS files
-	cssRegex := regexp.MustCompile(`(<link[^>]+href="/static/css/[^"]+\.css"[^>]*>)`)
+	// Add version to all static CSS files (using pre-compiled regex)
 	htmlContent = cssRegex.ReplaceAllStringFunc(htmlContent, func(match string) string {
 		return strings.Replace(match, ".css", `.css?v=`+s.version, 1)
 	})
 
 	// Add i18n script before body closing tag
+	// Note: ToJSON() uses json.Marshal which properly escapes special characters
 	i18nJSON, err := s.i18n.ToJSON()
 	if err != nil {
 		log.Printf("Failed to serialize i18n translations: %v", err)
 		i18nJSON = []byte("{}")
 	}
 
+	// Inject translations as properly escaped JSON (json.Marshal handles escaping)
 	htmlContent = strings.Replace(htmlContent, "</body>", `<script>window.translations = `+string(i18nJSON)+`;</script></body>`, 1)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -242,7 +254,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	hostExists := s.hub.HasHost()
 
-	log.Printf("WebSocket connection attempt, token: %q, hostExists: %v", token, hostExists)
+	// Log connection attempt without exposing the token value
+	log.Printf("WebSocket connection attempt, hasToken: %v, hostExists: %v", token != "", hostExists)
 
 	// Require token for client connections (when host already exists)
 	if hostExists {

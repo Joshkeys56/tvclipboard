@@ -21,6 +21,7 @@ type Client struct {
 	lastMessage  time.Time
 	messageCount int
 	mu           sync.Mutex
+	closed       bool // Track if Send channel has been closed
 }
 
 // Hub manages all connected clients
@@ -104,7 +105,13 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			if _, ok := h.clients[client.ID]; ok {
 				delete(h.clients, client.ID)
-				close(client.Send)
+				// Safely close the Send channel only if not already closed
+				client.mu.Lock()
+				if !client.closed {
+					close(client.Send)
+					client.closed = true
+				}
+				client.mu.Unlock()
 
 				// If host disconnects, assign new host
 				if client.ID == h.hostID {
@@ -141,7 +148,13 @@ func (h *Hub) Run() {
 					case client.Send <- broadcastMsg.Message:
 					default:
 						log.Printf("Client %s send channel full, removing from hub", id)
-						close(client.Send)
+						// Safely close the Send channel only if not already closed
+						client.mu.Lock()
+						if !client.closed {
+							close(client.Send)
+							client.closed = true
+						}
+						client.mu.Unlock()
 						delete(h.clients, id)
 					}
 				}
@@ -167,7 +180,7 @@ func (h *Hub) Stop() {
 	}
 }
 
-// checkRateLimit checks if client has exceeded rate limit
+// checkRateLimit checks if client has exceeded rate limit using sliding window
 func (c *Client) checkRateLimit(hub *Hub) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -177,18 +190,19 @@ func (c *Client) checkRateLimit(hub *Hub) bool {
 
 	// Reset count if more than a second has passed
 	if timeSinceLast >= time.Second {
-		c.messageCount = 0
+		c.messageCount = 1 // Count this message
 		c.lastMessage = now
 		return true
 	}
 
-	// Check if rate limit exceeded
+	// Check if rate limit exceeded BEFORE incrementing
 	if c.messageCount >= hub.rateLimitPerSec {
 		log.Printf("Rate limit exceeded for client %s", c.ID)
 		return false
 	}
 
 	c.messageCount++
+	c.lastMessage = now // Update timestamp on each message to prevent burst attacks
 	return true
 }
 

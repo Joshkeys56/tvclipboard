@@ -32,13 +32,18 @@
             input.value = '';
         } catch (error) {
             console.error('Encryption failed:', error);
-            // Fallback to sending unencrypted
+            // Warn user about unencrypted fallback
+            const proceed = confirm(t('errors.encryption_failed_confirm') || 'Encryption failed. Send message unencrypted?');
+            if (!proceed) {
+                return;
+            }
+            // Fallback to sending unencrypted with user consent
             const message = {
                 type: 'text',
                 content: content
             };
             ws.send(JSON.stringify(message));
-            console.log('Sent unencrypted message:', message);
+            console.log('Sent unencrypted message (user approved):', message);
             input.value = '';
         }
     } else {
@@ -279,7 +284,13 @@ function connect() {
     };
 
     ws.onmessage = function(event) {
-        const message = JSON.parse(event.data);
+        let message;
+        try {
+            message = JSON.parse(event.data);
+        } catch (error) {
+            console.error('Failed to parse WebSocket message:', error);
+            return;
+        }
         console.log('Received message:', message);
 
         if (message.type === 'role') {

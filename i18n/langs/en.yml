@@ -70,6 +70,7 @@ errors:
   crypto_not_available_send: "Web Crypto API not available. Sending unencrypted message."
   crypto_not_available_receive: "Web Crypto API not available. Received unencrypted message."
   decryption_failed: "Decryption failed:"
+  encryption_failed_confirm: "Encryption failed. Send message unencrypted?"
 
 backend:
   failed_generate_key: "Failed to generate private key"

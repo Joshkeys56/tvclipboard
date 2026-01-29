@@ -221,16 +221,19 @@ func (i *I18n) LoadAllLanguages() error {
 			continue
 		}
 
-		// Extract language code from filename (e.g., "en.yml" -> "en")
+		// Extract language code from filename (e.g., "en.yml" -> "en", "pt-BR.yaml" -> "pt-BR")
 		name := entry.Name()
-		lang := name[:len(name)-4] // Remove ".yml" or ".yaml"
-		if len(lang) < 2 {
-			continue
+		var lang string
+		if strings.HasSuffix(name, ".yml") {
+			lang = strings.TrimSuffix(name, ".yml")
+		} else if strings.HasSuffix(name, ".yaml") {
+			lang = strings.TrimSuffix(name, ".yaml")
+		} else {
+			continue // Skip non-YAML files
 		}
 
-		// Normalize language code (pt-BR.yaml -> pt-BR)
-		if lang == "pt-BR" {
-			lang = "pt-BR"
+		if len(lang) < 2 {
+			continue
 		}
 
 		if err := i.loadLanguage(lang); err != nil {

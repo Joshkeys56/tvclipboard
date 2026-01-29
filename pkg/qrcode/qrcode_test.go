@@ -167,8 +167,8 @@ func TestHTMLReplace(t *testing.T) {
 	}
 }
 
-// TestFindSubstring tests substring finding
-func TestFindSubstring(t *testing.T) {
+// TestStringIndexBehavior tests that strings.Index works as expected (used by htmlReplace)
+func TestStringIndexBehavior(t *testing.T) {
 	tests := []struct {
 		name     string
 		s        string
@@ -209,7 +209,7 @@ func TestFindSubstring(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := findSubstring(tt.s, tt.substr)
+			result := strings.Index(tt.s, tt.substr)
 			if result != tt.expected {
 				t.Errorf("Expected %d, got %d", tt.expected, result)
 			}

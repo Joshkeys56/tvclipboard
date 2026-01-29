@@ -3,6 +3,7 @@ package qrcode
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
@@ -66,18 +67,9 @@ func InjectSessionTimeout(html string, timeoutSec int) string {
 
 // htmlReplace replaces the first occurrence of old with new in html
 func htmlReplace(html, old, new string) string {
-	if idx := findSubstring(html, old); idx != -1 {
+	// Use standard library's optimized string search
+	if idx := strings.Index(html, old); idx != -1 {
 		return html[:idx] + new + html[idx+len(old):]
 	}
 	return html
-}
-
-// findSubstring finds the index of substr in s
-func findSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

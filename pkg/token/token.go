@@ -34,16 +34,17 @@ type TokenManager struct {
 // base62 characters for generating short alphanumeric IDs
 const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// generateRandomID generates a short alphanumeric ID
+// generateRandomID generates a short alphanumeric ID using crypto/rand
 func generateRandomID() (string, error) {
 	b := make([]byte, TokenLength)
+	// Generate random bytes - need more bytes to avoid modulo bias
+	// Using 256 possible values mod 62 has slight bias, but acceptable for tokens
+	randomBytes := make([]byte, TokenLength)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
 	for i := range b {
-		// Generate random byte and use modulo to get base62 index
-		val, err := rand.Prime(rand.Reader, 8)
-		if err != nil {
-			return "", fmt.Errorf("failed to generate random number: %w", err)
-		}
-		b[i] = base62Chars[int(val.Int64())%len(base62Chars)]
+		b[i] = base62Chars[int(randomBytes[i])%len(base62Chars)]
 	}
 	return string(b), nil
 }

@@ -32,7 +32,7 @@ async function getKey() {
             {
                 name: "PBKDF2",
                 salt: enc.encode("tvclipboard-salt"),
-                iterations: 1000,
+                iterations: 100000, // Increased from 1000 for better security
                 hash: "SHA-256"
             },
             keyMaterial,
